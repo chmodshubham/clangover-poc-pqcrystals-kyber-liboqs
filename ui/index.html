@@ -1,0 +1,1059 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clangover Attack Visualizer</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Courier New', monospace;
+    background: #0a0a1a;
+    color: #e0e0e0;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Header */
+  .header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 16px 24px;
+    background: #0f0f2a;
+    border-bottom: 1px solid #2a2a4e;
+  }
+  .header h1 { font-size: 18px; color: #00ff41; letter-spacing: 2px; }
+  .header .subtitle { font-size: 12px; color: #666; margin-top: 2px; }
+  .controls { display: flex; gap: 10px; }
+  .controls button {
+    font-family: inherit; font-size: 13px; padding: 8px 20px;
+    border: 1px solid #2a2a4e; border-radius: 4px; cursor: pointer;
+    transition: all 0.2s;
+  }
+  #startBtn { background: #0a3a0a; color: #00ff41; border-color: #00ff41; }
+  #startBtn:hover { background: #0d4d0d; }
+  #startBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+  #stopBtn { background: #3a0a0a; color: #ff0040; border-color: #ff0040; }
+  #stopBtn:hover { background: #4d0d0d; }
+  #stopBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+  #restartBtn { background: #3a2a0a; color: #ffa500; border-color: #ffa500; }
+  #restartBtn:hover { background: #4d3a0d; }
+  #restartBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  /* Flow diagram */
+  .flow {
+    display: flex; justify-content: center; align-items: center;
+    gap: 0; padding: 16px 24px;
+    background: #0d0d22;
+    border-bottom: 1px solid #1a1a3e;
+  }
+  .flow-step {
+    padding: 8px 18px; font-size: 12px;
+    background: #1a1a2e; border: 1px solid #2a2a4e; border-radius: 4px;
+    color: #555; transition: all 0.3s;
+  }
+  .flow-step.active {
+    color: #ffd700; border-color: #ffd700; background: #2a2a1a;
+    box-shadow: 0 0 10px rgba(255, 215, 0, 0.2);
+  }
+  .flow-step.done { color: #00ff41; border-color: #00aa2a; background: #0a1a0a; }
+  .flow-arrow { color: #333; padding: 0 8px; font-size: 16px; }
+
+  /* Progress */
+  .progress-bar {
+    padding: 12px 24px;
+    background: #0d0d22;
+    border-bottom: 1px solid #1a1a3e;
+    display: flex; align-items: center; gap: 16px;
+  }
+  .progress-bar .label { font-size: 13px; color: #888; white-space: nowrap; }
+  .progress-bar .bar-track {
+    flex: 1; height: 8px; background: #1a1a2e;
+    border-radius: 4px; overflow: hidden;
+  }
+  .progress-bar .bar-fill {
+    height: 100%; background: #00ff41; border-radius: 4px;
+    transition: width 0.3s; width: 0%;
+  }
+  .progress-bar .stats { font-size: 12px; color: #888; white-space: nowrap; }
+  .progress-bar .pct { color: #00ff41; font-weight: bold; }
+
+  /* Main area */
+  .main {
+    display: flex; gap: 0;
+    padding: 0;
+    min-height: 400px;
+  }
+
+  /* Coefficient grid */
+  .grid-panel {
+    flex: 1; padding: 20px 24px;
+    overflow: auto;
+  }
+  .grid-panel h2 { font-size: 13px; color: #888; margin-bottom: 12px; }
+  .grid-section-label {
+    font-size: 11px; color: #555; margin: 8px 0 4px 0;
+  }
+  .coeff-grid {
+    display: grid;
+    grid-template-columns: repeat(32, 28px);
+    gap: 2px;
+    margin-bottom: 6px;
+  }
+  .coeff-cell {
+    width: 28px; height: 28px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; font-weight: bold;
+    background: #1a1a2e; border-radius: 2px;
+    transition: background 0.3s, color 0.3s;
+    color: #333;
+  }
+  .coeff-cell.correct { background: #0a3a0a; color: #00ff41; }
+  .coeff-cell.wrong { background: #3a0a0a; color: #ff0040; }
+  .coeff-cell.active {
+    background: #3a3a0a; color: #ffd700;
+    box-shadow: 0 0 6px rgba(255, 215, 0, 0.4);
+    animation: pulse 1s ease-in-out infinite;
+  }
+  .coeff-cell.pending { background: #1a1a2e; color: #333; }
+  @keyframes pulse {
+    0%, 100% { box-shadow: 0 0 6px rgba(255, 215, 0, 0.4); }
+    50% { box-shadow: 0 0 14px rgba(255, 215, 0, 0.7); }
+  }
+
+  /* Stats panel */
+  .stats-panel {
+    width: 340px; min-width: 340px;
+    padding: 20px;
+    background: #0f0f2a;
+    border-left: 1px solid #1a1a3e;
+    overflow-y: auto;
+  }
+  .stats-panel h2 { font-size: 13px; color: #888; margin-bottom: 12px; }
+  .stat-section { margin-bottom: 20px; }
+  .stat-section h3 {
+    font-size: 11px; color: #555; text-transform: uppercase;
+    letter-spacing: 1px; margin-bottom: 8px;
+    border-bottom: 1px solid #1a1a3e; padding-bottom: 4px;
+  }
+  .stat-row {
+    display: flex; justify-content: space-between;
+    font-size: 12px; padding: 3px 0;
+  }
+  .stat-row .label { color: #888; }
+  .stat-row .value { color: #e0e0e0; }
+  .stat-row .value.green { color: #00ff41; }
+  .stat-row .value.red { color: #ff0040; }
+  .stat-row .value.yellow { color: #ffd700; }
+
+  /* Means visualization */
+  .means-chart { margin-top: 8px; }
+  .means-row {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; padding: 2px 0;
+  }
+  .means-row .ct-label { width: 36px; color: #666; text-align: right; }
+  .means-bar-track {
+    flex: 1; height: 10px; background: #1a1a2e;
+    border-radius: 2px; position: relative; overflow: hidden;
+  }
+  .means-bar-fill {
+    position: absolute; top: 0; height: 100%; border-radius: 2px;
+    transition: all 0.3s;
+  }
+  .means-bar-fill.zero { background: #3366cc; }
+  .means-bar-fill.one { background: #cc6633; }
+  .means-row .m-val { width: 20px; font-size: 10px; color: #888; }
+  .means-row .m-mean { width: 44px; font-size: 9px; color: #555; text-align: right; }
+  .means-row .m-var { width: 42px; font-size: 9px; color: #443; text-align: right; }
+  .means-ref-line {
+    display: flex; justify-content: space-between;
+    font-size: 10px; color: #555; padding: 2px 42px 2px 42px;
+  }
+
+  /* Bit pattern */
+  .bit-pattern {
+    display: flex; gap: 4px; align-items: center;
+    margin-top: 8px;
+  }
+  .bit {
+    width: 22px; height: 22px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: bold; border-radius: 3px;
+    border: 1px solid #2a2a4e;
+  }
+  .bit.b0 { background: #1a2a4e; color: #3366cc; }
+  .bit.b1 { background: #4e2a1a; color: #cc6633; }
+  .bit-arrow { color: #555; font-size: 14px; margin: 0 4px; }
+  .bit-result { font-size: 14px; font-weight: bold; color: #ffd700; }
+
+  /* Event log */
+  .log-panel {
+    padding: 12px 24px;
+    border-top: 1px solid #1a1a3e;
+    background: #0a0a18;
+    max-height: 200px;
+    overflow-y: auto;
+  }
+  .log-panel h2 { font-size: 13px; color: #888; margin-bottom: 8px; }
+  .log-entry {
+    font-size: 11px; padding: 2px 0;
+    display: flex; gap: 10px;
+  }
+  .log-entry .log-time { color: #555; min-width: 60px; }
+  .log-entry .log-badge {
+    font-size: 10px; padding: 1px 6px; border-radius: 2px;
+    min-width: 60px; text-align: center;
+  }
+  .log-entry .log-badge.keygen { background: #2a1a4e; color: #aa66ff; }
+  .log-entry .log-badge.coeff { background: #1a2a4e; color: #66aaff; }
+  .log-entry .log-badge.measure { background: #2a2a1a; color: #ffd700; }
+  .log-entry .log-badge.done { background: #0a2a0a; color: #00ff41; }
+  .log-entry .log-badge.complete { background: #0a3a0a; color: #00ff41; }
+  .log-entry .log-badge.error { background: #3a0a0a; color: #ff0040; }
+  .log-entry .log-msg { color: #aaa; }
+
+  /* Final results overlay */
+  .results-banner {
+    display: none;
+    padding: 16px 24px;
+    background: #0a2a0a;
+    border: 1px solid #00ff41;
+    margin: 16px 24px;
+    border-radius: 6px;
+    text-align: center;
+  }
+  .results-banner.show { display: block; }
+  .results-banner h2 { color: #00ff41; font-size: 16px; margin-bottom: 8px; }
+  .results-banner .stats-line { font-size: 14px; color: #ccc; }
+  .results-banner .accuracy { font-size: 24px; color: #00ff41; font-weight: bold; }
+
+  /* Idle state */
+  .idle-msg {
+    color: #444; font-size: 14px; text-align: center;
+    padding: 60px 20px;
+  }
+</style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div>
+    <h1>CLANGOVER ATTACK VISUALIZER</h1>
+    <div class="subtitle">ML-KEM 512 Timing Side-Channel Attack &nbsp;&mdash;&nbsp; <a href="/learn" style="color:#66aaff;text-decoration:none;font-size:11px;border:1px solid #2a2a4e;padding:3px 10px;border-radius:4px">Learn How It Works</a></div>
+  </div>
+  <div class="controls">
+    <button id="startBtn" onclick="startAttack()">Start Attack</button>
+    <button id="stopBtn" onclick="stopAttack()" disabled>Stop</button>
+    <button id="restartBtn" onclick="restartAttack()" disabled>Restart</button>
+  </div>
+</div>
+
+<!-- Flow diagram -->
+<div class="flow">
+  <div class="flow-step" id="flow-keygen">Key Generation</div>
+  <div class="flow-arrow">&#8594;</div>
+  <div class="flow-step" id="flow-craft">Craft Ciphertexts</div>
+  <div class="flow-arrow">&#8594;</div>
+  <div class="flow-step" id="flow-measure">Timing Measurement</div>
+  <div class="flow-arrow">&#8594;</div>
+  <div class="flow-step" id="flow-analyze">Statistical Analysis</div>
+  <div class="flow-arrow">&#8594;</div>
+  <div class="flow-step" id="flow-guess">Guess Coefficient</div>
+</div>
+
+<!-- Progress bar -->
+<div class="progress-bar">
+  <div class="label">Progress:</div>
+  <div class="bar-track"><div class="bar-fill" id="progressFill"></div></div>
+  <div class="stats">
+    <span id="coeffProgress">0 / 512</span>
+    &nbsp;&nbsp;<span class="pct" id="coeffPct">0%</span>
+    &nbsp;&nbsp;<span id="elapsed" style="color:#666">0s</span>
+  </div>
+</div>
+
+<!-- Results banner (hidden until complete) -->
+<div class="results-banner" id="resultsBanner">
+  <h2>ATTACK COMPLETE</h2>
+  <div class="accuracy" id="finalAccuracy"></div>
+  <div class="stats-line" id="finalStats"></div>
+</div>
+
+<!-- Main content -->
+<div class="main">
+  <!-- Coefficient grid -->
+  <div class="grid-panel">
+    <h2>SECRET KEY RECOVERY</h2>
+    <div class="grid-section-label">Polynomial vector 0 (coefficients 0-255)</div>
+    <div class="coeff-grid" id="grid0"></div>
+    <div class="grid-section-label" style="margin-top:12px">Polynomial vector 1 (coefficients 256-511)</div>
+    <div class="coeff-grid" id="grid1"></div>
+  </div>
+
+  <!-- Stats panel -->
+  <div class="stats-panel">
+    <h2>LIVE ANALYSIS</h2>
+
+    <div class="stat-section">
+      <h3>Current Coefficient</h3>
+      <div class="stat-row"><span class="label">Index</span><span class="value" id="statIndex">--</span></div>
+      <div class="stat-row"><span class="label">Iterations</span><span class="value" id="statIter">--</span></div>
+      <div class="stat-row"><span class="label">Confidence</span><span class="value" id="statConf">--</span></div>
+      <div class="stat-row"><span class="label">Discarded</span><span class="value" id="statDisc">--</span></div>
+      <div class="stat-row"><span class="label">Min Samples</span><span class="value" id="statMinSamples">--</span></div>
+      <div class="stat-row"><span class="label">Discard Rate</span><span class="value" id="statDiscRate">--</span></div>
+      <div class="stat-row"><span class="label">Anchor Gap</span><span class="value yellow" id="statAnchorGap">--</span></div>
+      <div class="stat-row"><span class="label">Current Guess</span><span class="value yellow" id="statGuess">--</span></div>
+      <div class="stat-row"><span class="label">Ground Truth</span><span class="value" id="statTruth">--</span></div>
+    </div>
+
+    <div class="stat-section">
+      <h3>Timing Means (differential cycles)</h3>
+      <div class="means-ref-line">
+        <span style="color:#3366cc">m'=0: <span id="anchorZeroVal">--</span></span>
+        <span style="color:#cc6633">m'=1: <span id="anchorOneVal">--</span></span>
+      </div>
+      <div class="means-chart" id="meansChart"></div>
+      <div style="margin-top:10px">
+        <h3 style="font-size:11px;color:#555;letter-spacing:1px;border-bottom:1px solid #1a1a3e;padding-bottom:4px">Bit Pattern</h3>
+        <div class="bit-pattern" id="bitPattern">
+          <span style="color:#444;font-size:12px">Waiting for data...</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="stat-section">
+      <h3>Overall Results</h3>
+      <div class="stat-row"><span class="label">Recovered</span><span class="value" id="statRecovered">0 / 512</span></div>
+      <div class="stat-row"><span class="label">Correct</span><span class="value green" id="statCorrect">0</span></div>
+      <div class="stat-row"><span class="label">Wrong</span><span class="value red" id="statWrong">0</span></div>
+      <div class="stat-row"><span class="label">Accuracy</span><span class="value green" id="statAccuracy">--</span></div>
+      <div class="stat-row"><span class="label">Avg Solve Time</span><span class="value" id="statAvgSolve">--</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- Event log -->
+<div class="log-panel" id="logPanel">
+  <h2>EVENT LOG</h2>
+  <div id="logEntries"></div>
+</div>
+
+<script>
+// State
+const state = {
+  running: false,
+  paused: false,
+  truths: [],
+  guesses: new Array(512).fill(null),
+  currentIndex: -1,
+  doneCount: 0,
+  correctCount: 0,
+  wrongCount: 0,
+  startTime: null,
+  lastMeans: null,
+  lastMeasurement: null,
+  coeffStartTime: null,
+  totalSolveTime: 0,
+};
+
+let eventSource = null;
+let elapsedTimer = null;
+let replaying = false;
+
+// Initialize grid cells
+function initGrids() {
+  for (let g = 0; g < 2; g++) {
+    const grid = document.getElementById('grid' + g);
+    grid.innerHTML = '';
+    for (let i = 0; i < 256; i++) {
+      const cell = document.createElement('div');
+      cell.className = 'coeff-cell pending';
+      cell.id = 'cell-' + (g * 256 + i);
+      cell.textContent = '';
+      cell.title = `Coefficient #${g * 256 + i}`;
+      grid.appendChild(cell);
+    }
+  }
+}
+
+// Initialize means chart rows
+function initMeansChart() {
+  const chart = document.getElementById('meansChart');
+  chart.innerHTML = '';
+  for (let i = 0; i < 7; i++) {
+    const row = document.createElement('div');
+    row.className = 'means-row';
+    row.innerHTML = `
+      <span class="ct-label">CT[${i}]</span>
+      <div class="means-bar-track">
+        <div class="means-bar-fill" id="meanBar${i}" style="width:0;left:50%"></div>
+      </div>
+      <span class="m-val" id="mVal${i}">?</span>
+      <span class="m-mean" id="mMean${i}">--</span>
+      <span class="m-var" id="mVar${i}"></span>
+    `;
+    chart.appendChild(row);
+  }
+}
+
+function resetUI() {
+  state.truths = [];
+  state.guesses = new Array(512).fill(null);
+  state.currentIndex = -1;
+  state.doneCount = 0;
+  state.correctCount = 0;
+  state.wrongCount = 0;
+  state.startTime = Date.now();
+  state.lastMeans = null;
+  state.lastMeasurement = null;
+  state.coeffStartTime = null;
+  state.totalSolveTime = 0;
+
+  initGrids();
+  initMeansChart();
+
+  document.getElementById('resultsBanner').classList.remove('show');
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('coeffProgress').textContent = '0 / 512';
+  document.getElementById('coeffPct').textContent = '0%';
+  document.getElementById('elapsed').textContent = '0s';
+  document.getElementById('logEntries').innerHTML = '';
+
+  document.getElementById('statIndex').textContent = '--';
+  document.getElementById('statIter').textContent = '--';
+  document.getElementById('statConf').textContent = '--';
+  document.getElementById('statDisc').textContent = '--';
+  document.getElementById('statGuess').textContent = '--';
+  document.getElementById('statTruth').textContent = '--';
+  document.getElementById('statRecovered').textContent = '0 / 512';
+  document.getElementById('statCorrect').textContent = '0';
+  document.getElementById('statWrong').textContent = '0';
+  document.getElementById('statAccuracy').textContent = '--';
+  document.getElementById('statAvgSolve').textContent = '--';
+  document.getElementById('statMinSamples').textContent = '--';
+  document.getElementById('statDiscRate').textContent = '--';
+  document.getElementById('statAnchorGap').textContent = '--';
+  document.getElementById('anchorZeroVal').textContent = '--';
+  document.getElementById('anchorOneVal').textContent = '--';
+  document.getElementById('bitPattern').innerHTML = '<span style="color:#444;font-size:12px">Waiting for data...</span>';
+
+  setFlow('idle');
+}
+
+// Flow diagram
+function setFlow(phase) {
+  const steps = ['keygen', 'craft', 'measure', 'analyze', 'guess'];
+  const phaseMap = {
+    'idle': -1,
+    'keygen': 0,
+    'craft': 1,
+    'measure': 2,
+    'analyze': 3,
+    'guess': 4,
+    'complete': 5,
+  };
+  const idx = phaseMap[phase] ?? -1;
+  steps.forEach((s, i) => {
+    const el = document.getElementById('flow-' + s);
+    el.classList.remove('active', 'done');
+    if (i < idx) el.classList.add('done');
+    else if (i === idx) el.classList.add('active');
+  });
+}
+
+// Update grid cell
+function updateCell(index, guess, truth) {
+  const cell = document.getElementById('cell-' + index);
+  if (!cell) return;
+  cell.classList.remove('pending', 'active', 'correct', 'wrong');
+  if (guess === null) {
+    cell.classList.add('pending');
+    cell.textContent = '';
+  } else if (guess === truth) {
+    cell.classList.add('correct');
+    cell.textContent = guess;
+  } else {
+    cell.classList.add('wrong');
+    cell.textContent = guess;
+  }
+}
+
+function setActiveCell(index) {
+  // Remove previous active
+  const prev = document.querySelector('.coeff-cell.active');
+  if (prev) {
+    const prevIdx = parseInt(prev.id.split('-')[1]);
+    if (state.guesses[prevIdx] !== null) {
+      updateCell(prevIdx, state.guesses[prevIdx], state.truths[prevIdx]);
+    } else {
+      prev.classList.remove('active');
+      prev.classList.add('pending');
+      prev.textContent = '';
+    }
+  }
+  const cell = document.getElementById('cell-' + index);
+  if (cell) {
+    cell.classList.remove('pending', 'correct', 'wrong');
+    cell.classList.add('active');
+    cell.textContent = '?';
+  }
+}
+
+// Update means visualization
+function updateMeans(means, variances) {
+  if (!means || means.length < 9) return;
+  state.lastMeans = means;
+
+  const knownZero = means[7];  // CT_KNOWN_ZERO = 7
+  const knownOne = means[8];   // CT_KNOWN_ONE = 8
+  const minVal = Math.min(knownZero, knownOne, ...means.slice(0, 7));
+  const maxVal = Math.max(knownZero, knownOne, ...means.slice(0, 7));
+  const range = maxVal - minVal || 1;
+
+  // Update anchor values
+  document.getElementById('anchorZeroVal').textContent = knownZero.toFixed(1);
+  document.getElementById('anchorOneVal').textContent = knownOne.toFixed(1);
+
+  // Update anchor gap stat
+  const anchorGap = Math.abs(knownZero - knownOne);
+  document.getElementById('statAnchorGap').textContent = anchorGap.toFixed(1) + ' cyc';
+
+  for (let i = 0; i < 7; i++) {
+    const bar = document.getElementById('meanBar' + i);
+    const mVal = document.getElementById('mVal' + i);
+    const mMean = document.getElementById('mMean' + i);
+    const mVar = document.getElementById('mVar' + i);
+    const val = means[i];
+
+    // Position as percentage of range
+    const pct = ((val - minVal) / range) * 100;
+    bar.style.left = Math.min(pct, 95) + '%';
+    bar.style.width = '6px';
+
+    // Show numeric mean
+    mMean.textContent = val.toFixed(1);
+
+    // Show variance (standard deviation)
+    if (variances && variances[i] !== undefined && variances[i] > 0) {
+      const sd = Math.sqrt(variances[i]);
+      mVar.textContent = '\u00b1' + sd.toFixed(0);
+    }
+
+    // Color based on classification
+    const distZero = Math.abs(knownZero - val);
+    const distOne = Math.abs(knownOne - val);
+    const isOne = distZero > distOne;
+    bar.className = 'means-bar-fill ' + (isOne ? 'one' : 'zero');
+    mVal.textContent = isOne ? '1' : '0';
+    mVal.style.color = isOne ? '#cc6633' : '#3366cc';
+  }
+}
+
+// Update bit pattern display
+function updateBitPattern(means) {
+  if (!means || means.length < 9) return;
+  const knownZero = means[7];
+  const knownOne = means[8];
+  const container = document.getElementById('bitPattern');
+  let html = '';
+  let pattern = [];
+
+  for (let i = 0; i < 7; i++) {
+    const distZero = Math.abs(knownZero - means[i]);
+    const distOne = Math.abs(knownOne - means[i]);
+    const bit = distZero > distOne ? 1 : 0;
+    pattern.push(bit);
+    html += `<div class="bit b${bit}">${bit}</div>`;
+  }
+
+  // Try to match pattern to coefficient
+  const patterns = [
+    [0,0,1,0,1,0,1],  // -3
+    [1,0,1,0,1,0,1],  // -2
+    [1,0,0,0,1,0,1],  // -1
+    [1,0,0,0,0,0,1],  //  0
+    [1,0,0,0,0,1,0],  // +1
+    [1,0,0,1,0,1,0],  // +2
+    [1,1,0,1,0,1,0],  // +3
+  ];
+  let matched = null;
+  for (let i = 0; i < 7; i++) {
+    if (JSON.stringify(pattern) === JSON.stringify(patterns[i])) {
+      matched = i - 3;
+      break;
+    }
+  }
+
+  html += '<span class="bit-arrow">&#8594;</span>';
+  if (matched !== null) {
+    html += `<span class="bit-result">${matched >= 0 ? '+' : ''}${matched}</span>`;
+  } else {
+    html += '<span class="bit-result" style="color:#ff0040">??</span>';
+  }
+
+  container.innerHTML = html;
+}
+
+// Add log entry
+function addLog(time, badge, msg) {
+  const entries = document.getElementById('logEntries');
+  const entry = document.createElement('div');
+  entry.className = 'log-entry';
+  const timeStr = typeof time === 'number' ? time.toFixed(1) + 's' : time;
+  entry.innerHTML = `
+    <span class="log-time">[${timeStr}]</span>
+    <span class="log-badge ${badge}">${badge.toUpperCase()}</span>
+    <span class="log-msg">${msg}</span>
+  `;
+  entries.appendChild(entry);
+  const panel = document.getElementById('logPanel');
+  panel.scrollTop = panel.scrollHeight;
+}
+
+// Update progress
+function updateProgress() {
+  const pct = (state.doneCount / 512) * 100;
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('coeffProgress').textContent = `${state.doneCount} / 512`;
+  document.getElementById('coeffPct').textContent = pct.toFixed(1) + '%';
+}
+
+function updateOverallStats() {
+  document.getElementById('statRecovered').textContent = `${state.doneCount} / 512`;
+  document.getElementById('statCorrect').textContent = state.correctCount;
+  document.getElementById('statWrong').textContent = state.wrongCount;
+  if (state.doneCount > 0) {
+    const acc = (state.correctCount / state.doneCount * 100).toFixed(1);
+    document.getElementById('statAccuracy').textContent = acc + '%';
+  }
+}
+
+// Event handlers
+function handleEvent(evt) {
+  switch (evt.event) {
+    case 'keygen':
+      state.truths = evt.truths;
+      if (!replaying) {
+        setFlow('keygen');
+        addLog(0, 'keygen', `Generated keypair &mdash; ${evt.n} coefficients to recover`);
+      }
+      break;
+
+    case 'coeff_start':
+      state.currentIndex = evt.index;
+      state.coeffStartTime = evt.time;
+      if (!replaying) {
+        setActiveCell(evt.index);
+        setFlow('craft');
+        document.getElementById('statIndex').textContent = `#${evt.index}`;
+        document.getElementById('statIter').textContent = '0';
+        document.getElementById('statConf').textContent = '0';
+        document.getElementById('statDisc').textContent = '0';
+        document.getElementById('statMinSamples').textContent = '0 / 500';
+        document.getElementById('statDiscRate').textContent = '--';
+        document.getElementById('statGuess').textContent = '??';
+        document.getElementById('statTruth').textContent =
+          state.truths[evt.index] !== undefined ? state.truths[evt.index] : '--';
+        addLog(evt.time, 'coeff', `Starting coefficient #${evt.index}`);
+        setTimeout(() => setFlow('measure'), 100);
+      }
+      break;
+
+    case 'measurement':
+      state.lastMeasurement = evt;
+      if (!replaying) {
+        setFlow('analyze');
+        document.getElementById('statIter').textContent = evt.iteration.toLocaleString();
+        document.getElementById('statConf').textContent = evt.confidence;
+        document.getElementById('statDisc').textContent = evt.discarded.toLocaleString();
+        document.getElementById('statGuess').textContent =
+          evt.guess !== null ? evt.guess : '??';
+        if (evt.min_samples !== undefined) {
+          const ms = evt.min_samples;
+          const el = document.getElementById('statMinSamples');
+          el.textContent = ms >= 500 ? ms.toLocaleString() + ' \u2713' : ms + ' / 500';
+          el.style.color = ms >= 500 ? '#00ff41' : '#ffd700';
+        }
+        if (evt.iteration > 0) {
+          const total = evt.iteration + evt.discarded;
+          const rate = (evt.discarded / total * 100).toFixed(1);
+          document.getElementById('statDiscRate').textContent = rate + '%';
+        }
+        if (evt.means) {
+          updateMeans(evt.means, evt.variances);
+          updateBitPattern(evt.means);
+        }
+      }
+      break;
+
+    case 'coeff_done': {
+      state.guesses[evt.index] = evt.guess;
+      state.doneCount++;
+      if (evt.correct) state.correctCount++;
+      else state.wrongCount++;
+      if (state.coeffStartTime !== null && evt.time !== undefined) {
+        state.totalSolveTime += evt.time - state.coeffStartTime;
+      }
+      if (!replaying) {
+        updateCell(evt.index, evt.guess, evt.truth);
+        updateProgress();
+        const avg = state.doneCount > 0 ? state.totalSolveTime / state.doneCount : 0;
+        document.getElementById('statAvgSolve').textContent = avg.toFixed(2) + 's';
+        updateOverallStats();
+        setFlow('guess');
+        const solveStr = state.coeffStartTime !== null && evt.time !== undefined
+          ? ` ${(evt.time - state.coeffStartTime).toFixed(1)}s` : '';
+        const mark = evt.correct ? '&#10003;' : '&#10007;';
+        const cls = evt.correct ? 'done' : 'error';
+        const conf = evt.confidence !== undefined ? ` conf=${evt.confidence}` : '';
+        addLog(evt.time, cls,
+          `#${evt.index}: guess=${evt.guess ?? '??'}, truth=${evt.truth} ${mark} (${evt.iterations.toLocaleString()} iters${conf}${solveStr})`);
+      }
+      break;
+    }
+
+    case 'complete':
+      state.running = false;
+      if (!replaying) {
+        setFlow('complete');
+        setButtons('finished');
+        const banner = document.getElementById('resultsBanner');
+        banner.classList.add('show');
+        document.getElementById('finalAccuracy').textContent = evt.accuracy.toFixed(1) + '%';
+        document.getElementById('finalStats').textContent =
+          `${evt.correct} / ${evt.total} coefficients correct in ${evt.time.toFixed(1)}s`;
+        addLog(evt.time, 'complete',
+          `Attack complete: ${evt.correct}/${evt.total} correct (${evt.accuracy.toFixed(1)}%)`);
+        clearInterval(elapsedTimer);
+      } else {
+        state._completeEvt = evt;  // store for refreshUIFromState
+      }
+      break;
+
+    case 'replay_done':
+      replaying = false;
+      refreshUIFromState();
+      break;
+
+    case 'stream_end':
+      if (eventSource) { eventSource.close(); eventSource = null; }
+      if (!state.running) return;
+      state.running = false;
+      setButtons('idle');
+      clearInterval(elapsedTimer);
+      break;
+
+    case 'error':
+      addLog('--', 'error', evt.msg || 'Unknown error');
+      break;
+  }
+}
+
+// Rebuild DOM from accumulated state after replay
+function refreshUIFromState() {
+  initGrids();
+  initMeansChart();
+
+  // Fill grid cells
+  for (let i = 0; i < 512; i++) {
+    if (state.guesses[i] !== null) {
+      updateCell(i, state.guesses[i], state.truths[i]);
+    }
+  }
+
+  // Set active cell if in progress
+  if (state.currentIndex >= 0 && state.currentIndex < 512 &&
+      state.guesses[state.currentIndex] === null) {
+    setActiveCell(state.currentIndex);
+  }
+
+  // Progress
+  updateProgress();
+  updateOverallStats();
+
+  // Avg solve time
+  if (state.doneCount > 0) {
+    const avg = state.totalSolveTime / state.doneCount;
+    document.getElementById('statAvgSolve').textContent = avg.toFixed(2) + 's';
+  }
+
+  // Current coefficient stats
+  if (state.currentIndex >= 0) {
+    document.getElementById('statIndex').textContent = `#${state.currentIndex}`;
+    document.getElementById('statTruth').textContent =
+      state.truths[state.currentIndex] !== undefined ? state.truths[state.currentIndex] : '--';
+  }
+  if (state.lastMeasurement) {
+    const m = state.lastMeasurement;
+    document.getElementById('statIter').textContent = m.iteration.toLocaleString();
+    document.getElementById('statConf').textContent = m.confidence;
+    document.getElementById('statDisc').textContent = m.discarded.toLocaleString();
+    document.getElementById('statGuess').textContent = m.guess !== null ? m.guess : '??';
+    if (m.min_samples !== undefined) {
+      const el = document.getElementById('statMinSamples');
+      el.textContent = m.min_samples >= 500 ? m.min_samples.toLocaleString() + ' \u2713' : m.min_samples + ' / 500';
+      el.style.color = m.min_samples >= 500 ? '#00ff41' : '#ffd700';
+    }
+    if (m.iteration > 0) {
+      const rate = (m.discarded / (m.iteration + m.discarded) * 100).toFixed(1);
+      document.getElementById('statDiscRate').textContent = rate + '%';
+    }
+    if (m.means) {
+      updateMeans(m.means, m.variances);
+      updateBitPattern(m.means);
+    }
+  }
+
+  // Handle completed attack
+  if (state._completeEvt) {
+    const evt = state._completeEvt;
+    setFlow('complete');
+    setButtons('finished');
+    const banner = document.getElementById('resultsBanner');
+    banner.classList.add('show');
+    document.getElementById('finalAccuracy').textContent = evt.accuracy.toFixed(1) + '%';
+    document.getElementById('finalStats').textContent =
+      `${evt.correct} / ${evt.total} coefficients correct in ${evt.time.toFixed(1)}s`;
+    addLog(evt.time, 'complete',
+      `Attack complete: ${evt.correct}/${evt.total} correct (${evt.accuracy.toFixed(1)}%)`);
+    delete state._completeEvt;
+  } else if (state.running || state.paused) {
+    // Rebuild some key log entries
+    addLog('--', 'keygen', `Reconnected &mdash; replayed ${state.doneCount} coefficients`);
+    if (state.paused) {
+      setFlow('analyze');
+    }
+  }
+}
+
+// Button state management
+function setButtons(mode) {
+  const startBtn = document.getElementById('startBtn');
+  const stopBtn = document.getElementById('stopBtn');
+  const restartBtn = document.getElementById('restartBtn');
+  switch (mode) {
+    case 'idle':
+      startBtn.textContent = 'Start Attack';
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      restartBtn.disabled = true;
+      break;
+    case 'running':
+      startBtn.textContent = 'Start Attack';
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      restartBtn.disabled = false;
+      break;
+    case 'paused':
+      startBtn.textContent = 'Resume';
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      restartBtn.disabled = false;
+      break;
+    case 'finished':
+      startBtn.textContent = 'Start Attack';
+      startBtn.disabled = true;
+      stopBtn.disabled = true;
+      restartBtn.disabled = false;
+      break;
+  }
+}
+
+// Connect to SSE stream (replay or fresh)
+function connectStream(url) {
+  if (eventSource) eventSource.close();
+  eventSource = new EventSource(url);
+  eventSource.onmessage = (e) => {
+    try {
+      const evt = JSON.parse(e.data);
+      handleEvent(evt);
+    } catch (err) {
+      console.error('Parse error:', err, e.data);
+    }
+  };
+  eventSource.onerror = () => {
+    if (state.running && !state.paused) {
+      setTimeout(() => {
+        if (state.running && (!eventSource || eventSource.readyState === 2)) {
+          connectStream('/api/replay');
+        }
+      }, 1000);
+    }
+  };
+}
+
+// Start elapsed timer
+function startElapsedTimer() {
+  if (elapsedTimer) clearInterval(elapsedTimer);
+  elapsedTimer = setInterval(() => {
+    if (state.startTime) {
+      const s = Math.floor((Date.now() - state.startTime) / 1000);
+      const m = Math.floor(s / 60);
+      const sec = s % 60;
+      document.getElementById('elapsed').textContent =
+        m > 0 ? `${m}m ${sec}s` : `${sec}s`;
+    }
+  }, 1000);
+}
+
+// Start attack (or resume if paused)
+async function startAttack() {
+  if (state.paused) {
+    // Resume
+    try {
+      const res = await fetch('/api/start', { method: 'POST' });
+      const data = await res.json();
+      if (data.error) { addLog('--', 'error', data.error); return; }
+    } catch (err) { addLog('--', 'error', 'Resume failed: ' + err.message); return; }
+    state.paused = false;
+    state.running = true;
+    setButtons('running');
+    addLog('--', 'coeff', 'Attack resumed');
+    startElapsedTimer();
+    // Reconnect stream if closed
+    if (!eventSource || eventSource.readyState === 2) {
+      connectStream('/api/replay');
+    }
+    return;
+  }
+
+  // Fresh start
+  resetUI();
+  setButtons('running');
+  state.running = true;
+
+  addLog(0, 'keygen', 'Starting attack...');
+
+  try {
+    const res = await fetch('/api/start', { method: 'POST' });
+    const data = await res.json();
+    if (data.error) {
+      addLog('--', 'error', data.error);
+      state.running = false;
+      setButtons('idle');
+      return;
+    }
+  } catch (err) {
+    addLog('--', 'error', 'Failed to start: ' + err.message);
+    state.running = false;
+    setButtons('idle');
+    return;
+  }
+
+  state.startTime = Date.now();
+  startElapsedTimer();
+  connectStream('/api/stream');
+}
+
+// Stop (pause) attack
+async function stopAttack() {
+  state.paused = true;
+  state.running = false;
+  if (elapsedTimer) clearInterval(elapsedTimer);
+  setButtons('paused');
+  try {
+    await fetch('/api/stop', { method: 'POST' });
+  } catch (err) {}
+  addLog('--', 'coeff', 'Attack paused');
+}
+
+// Restart attack (kill + fresh start)
+async function restartAttack() {
+  if (eventSource) { eventSource.close(); eventSource = null; }
+  if (elapsedTimer) clearInterval(elapsedTimer);
+  state.paused = false;
+  state.running = false;
+
+  resetUI();
+  setButtons('running');
+  state.running = true;
+  addLog(0, 'keygen', 'Restarting attack...');
+
+  try {
+    const res = await fetch('/api/restart', { method: 'POST' });
+    const data = await res.json();
+    if (data.error) {
+      addLog('--', 'error', data.error);
+      state.running = false;
+      setButtons('idle');
+      return;
+    }
+  } catch (err) {
+    addLog('--', 'error', 'Restart failed: ' + err.message);
+    state.running = false;
+    setButtons('idle');
+    return;
+  }
+
+  state.startTime = Date.now();
+  startElapsedTimer();
+  connectStream('/api/stream');
+}
+
+// Page visibility change — reconnect if SSE died
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible' && (state.running || state.paused)) {
+    if (!eventSource || eventSource.readyState === 2) {
+      // Reset state for clean replay
+      state.doneCount = 0;
+      state.correctCount = 0;
+      state.wrongCount = 0;
+      state.totalSolveTime = 0;
+      state.guesses = new Array(512).fill(null);
+      state.lastMeasurement = null;
+      state.currentIndex = -1;
+      replaying = true;
+      connectStream('/api/replay');
+    }
+  }
+});
+
+// Init — check server status and recover state
+async function init() {
+  initGrids();
+  initMeansChart();
+
+  try {
+    const res = await fetch('/api/status');
+    const data = await res.json();
+
+    if (data.state === 'running') {
+      state.running = true;
+      state.paused = false;
+      state.startTime = Date.now();
+      setButtons('running');
+      startElapsedTimer();
+      replaying = true;
+      connectStream('/api/replay');
+
+    } else if (data.state === 'paused') {
+      state.running = false;
+      state.paused = true;
+      setButtons('paused');
+      replaying = true;
+      connectStream('/api/replay');
+
+    } else if (data.state === 'finished') {
+      state.running = false;
+      state.paused = false;
+      setButtons('finished');
+      replaying = true;
+      connectStream('/api/replay');
+
+    } else {
+      // idle
+      setButtons('idle');
+    }
+  } catch (err) {
+    // Server not responding, show idle state
+    setButtons('idle');
+  }
+}
+
+init();
+</script>
+
+</body>
+</html>

@@ -1,1 +1,4 @@
 clangover
+clangover-ui
+attack_log.jsonl
+.ref_built
