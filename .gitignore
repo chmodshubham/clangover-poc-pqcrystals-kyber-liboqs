@@ -1,4 +1,19 @@
-clangover
-clangover-ui
-attack_log.jsonl
+# Attack binaries
+clangover-pqcrystal-kyber
+clangover-pqcrystal-kyber-ui
+clangover-liboqs
+clangover-liboqs-ui
+
+# Build stamps
 .ref_built
+.liboqs_built
+
+# Build artifacts
+liboqs/build/
+
+# Runtime
+attack_log.jsonl
+
+# Python
+__pycache__/
+*.pyc

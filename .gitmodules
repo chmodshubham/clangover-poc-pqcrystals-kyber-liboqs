@@ -1,3 +1,6 @@
 [submodule "kyber"]
 	path = kyber
 	url = https://github.com/pq-crystals/kyber.git
+[submodule "liboqs"]
+	path = liboqs
+	url = https://github.com/open-quantum-safe/liboqs.git

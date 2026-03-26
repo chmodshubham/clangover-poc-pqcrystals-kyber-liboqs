@@ -8,16 +8,29 @@ import subprocess
 import sys
 import time
 
-from flask import Flask, Response, jsonify, send_file
+from flask import Flask, Response, jsonify, request, send_file
 
 app = Flask(__name__)
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LOG_FILE = os.path.join(BASE_DIR, "attack_log.jsonl")
-BINARY = os.path.join(BASE_DIR, "clangover-ui")
+
+TARGETS = {
+    "pqcrystals": {
+        "binary": os.path.join(BASE_DIR, "clangover-pqcrystal-kyber-ui"),
+        "make_target": "attack-pqcrystal-kyber",
+        "label": "PQ-Crystals Kyber (b628ba7)",
+    },
+    "liboqs": {
+        "binary": os.path.join(BASE_DIR, "clangover-liboqs-ui"),
+        "make_target": "attack-liboqs",
+        "label": "LibOQS v0.10.0",
+    },
+}
 
 process = None
 paused = False
+active_target = None
 
 
 @app.route("/")
@@ -34,53 +47,58 @@ def learn():
 def status():
     global process, paused
     if process is None:
-        # Check if there's a finished log file (server restarted but log remains)
         if os.path.exists(LOG_FILE):
-            return jsonify({"state": "finished", "pid": None})
-        return jsonify({"state": "idle", "pid": None})
+            return jsonify({"state": "finished", "pid": None, "target": active_target})
+        return jsonify({"state": "idle", "pid": None, "target": active_target})
 
     if process.poll() is not None:
-        # Process exited
-        return jsonify({"state": "finished", "pid": None})
+        return jsonify({"state": "finished", "pid": None, "target": active_target})
 
     if paused:
-        return jsonify({"state": "paused", "pid": process.pid})
+        return jsonify({"state": "paused", "pid": process.pid, "target": active_target})
 
-    return jsonify({"state": "running", "pid": process.pid})
+    return jsonify({"state": "running", "pid": process.pid, "target": active_target})
 
 
-def _ensure_binary():
+def _ensure_binary(target_key):
     """Build the UI variant if needed."""
-    if not os.path.exists(BINARY):
+    t = TARGETS[target_key]
+    if not os.path.exists(t["binary"]):
         result = subprocess.run(
-            ["make", "ui"], cwd=BASE_DIR, capture_output=True, text=True
+            ["make", t["make_target"]], cwd=BASE_DIR, capture_output=True, text=True
         )
         if result.returncode != 0:
             return result.stderr
     return None
 
 
-def _spawn_process():
+def _spawn_process(target_key):
     """Spawn a new attack process."""
-    global process, paused
+    global process, paused, active_target
+    t = TARGETS[target_key]
     process = subprocess.Popen(
-        [BINARY],
+        [t["binary"]],
         cwd=BASE_DIR,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
     paused = False
+    active_target = target_key
 
 
 @app.route("/api/start", methods=["POST"])
 def start():
     global process, paused
 
+    target_key = request.args.get("target", "pqcrystals")
+    if target_key not in TARGETS:
+        return jsonify({"error": f"Unknown target: {target_key}"}), 400
+
     # Resume if paused
     if process and process.poll() is None and paused:
         process.send_signal(signal.SIGCONT)
         paused = False
-        return jsonify({"status": "resumed", "pid": process.pid})
+        return jsonify({"status": "resumed", "pid": process.pid, "target": active_target})
 
     # Already running
     if process and process.poll() is None:
@@ -90,12 +108,12 @@ def start():
     if os.path.exists(LOG_FILE):
         os.remove(LOG_FILE)
 
-    err = _ensure_binary()
+    err = _ensure_binary(target_key)
     if err:
         return jsonify({"error": "Build failed", "details": err}), 500
 
-    _spawn_process()
-    return jsonify({"status": "started", "pid": process.pid})
+    _spawn_process(target_key)
+    return jsonify({"status": "started", "pid": process.pid, "target": active_target})
 
 
 @app.route("/api/stop", methods=["POST"])
@@ -104,7 +122,7 @@ def stop():
     if process and process.poll() is None:
         process.send_signal(signal.SIGSTOP)
         paused = True
-        return jsonify({"status": "paused", "pid": process.pid})
+        return jsonify({"status": "paused", "pid": process.pid, "target": active_target})
     return jsonify({"status": "not_running"})
 
 
@@ -112,10 +130,13 @@ def stop():
 def restart():
     global process, paused
 
+    target_key = request.args.get("target", active_target or "pqcrystals")
+    if target_key not in TARGETS:
+        return jsonify({"error": f"Unknown target: {target_key}"}), 400
+
     # Kill existing process
     if process and process.poll() is None:
         if paused:
-            # Must SIGCONT before SIGTERM on some systems
             try:
                 process.send_signal(signal.SIGCONT)
             except OSError:
@@ -132,17 +153,16 @@ def restart():
     if os.path.exists(LOG_FILE):
         os.remove(LOG_FILE)
 
-    err = _ensure_binary()
+    err = _ensure_binary(target_key)
     if err:
         return jsonify({"error": "Build failed", "details": err}), 500
 
-    _spawn_process()
-    return jsonify({"status": "restarted", "pid": process.pid})
+    _spawn_process(target_key)
+    return jsonify({"status": "restarted", "pid": process.pid, "target": active_target})
 
 
 def _generate_stream(replay=False):
     """SSE generator. If replay=True, replay existing log then live-tail."""
-    # Wait for the log file to appear
     waited = 0
     while not os.path.exists(LOG_FILE):
         time.sleep(0.1)
@@ -158,14 +178,11 @@ def _generate_stream(replay=False):
             if line.strip():
                 yield f"data: {line.strip()}\n\n"
             else:
-                # Finished reading existing content
                 if replaying:
                     yield 'data: {"event":"replay_done"}\n\n'
                     replaying = False
 
-                # Check if process is still alive
                 if process and process.poll() is not None:
-                    # Process exited — drain remaining lines
                     for remaining in f:
                         if remaining.strip():
                             yield f"data: {remaining.strip()}\n\n"

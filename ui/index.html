@@ -38,6 +38,12 @@
   #restartBtn { background: #3a2a0a; color: #ffa500; border-color: #ffa500; }
   #restartBtn:hover { background: #4d3a0d; }
   #restartBtn:disabled { opacity: 0.4; cursor: not-allowed; }
+  #targetSelect {
+    font-family: inherit; font-size: 12px; padding: 7px 10px;
+    background: #1a1a2e; color: #e0e0e0; border: 1px solid #2a2a4e;
+    border-radius: 4px; cursor: pointer;
+  }
+  .target-label { font-size: 11px; color: #666; }
 
   /* Flow diagram */
   .flow {
@@ -243,6 +249,11 @@
     <div class="subtitle">ML-KEM 512 Timing Side-Channel Attack &nbsp;&mdash;&nbsp; <a href="/learn" style="color:#66aaff;text-decoration:none;font-size:11px;border:1px solid #2a2a4e;padding:3px 10px;border-radius:4px">Learn How It Works</a></div>
   </div>
   <div class="controls">
+    <span class="target-label">Target:</span>
+    <select id="targetSelect">
+      <option value="pqcrystals">PQ-Crystals Kyber (b628ba7)</option>
+      <option value="liboqs">LibOQS v0.10.0</option>
+    </select>
     <button id="startBtn" onclick="startAttack()">Start Attack</button>
     <button id="stopBtn" onclick="stopAttack()" disabled>Stop</button>
     <button id="restartBtn" onclick="restartAttack()" disabled>Restart</button>
@@ -361,6 +372,7 @@ const state = {
 let eventSource = null;
 let elapsedTimer = null;
 let replaying = false;
+let activeTarget = null;
 
 // Initialize grid cells
 function initGrids() {
@@ -833,30 +845,35 @@ function setButtons(mode) {
   const startBtn = document.getElementById('startBtn');
   const stopBtn = document.getElementById('stopBtn');
   const restartBtn = document.getElementById('restartBtn');
+  const targetSel = document.getElementById('targetSelect');
   switch (mode) {
     case 'idle':
       startBtn.textContent = 'Start Attack';
       startBtn.disabled = false;
       stopBtn.disabled = true;
       restartBtn.disabled = true;
+      targetSel.disabled = false;
       break;
     case 'running':
       startBtn.textContent = 'Start Attack';
       startBtn.disabled = true;
       stopBtn.disabled = false;
       restartBtn.disabled = false;
+      targetSel.disabled = true;
       break;
     case 'paused':
       startBtn.textContent = 'Resume';
       startBtn.disabled = false;
       stopBtn.disabled = true;
       restartBtn.disabled = false;
+      targetSel.disabled = false;
       break;
     case 'finished':
       startBtn.textContent = 'Start Attack';
-      startBtn.disabled = true;
+      startBtn.disabled = false;
       stopBtn.disabled = true;
       restartBtn.disabled = false;
+      targetSel.disabled = false;
       break;
   }
 }
@@ -898,12 +915,23 @@ function startElapsedTimer() {
   }, 1000);
 }
 
-// Start attack (or resume if paused)
-async function startAttack() {
+// Target change while paused — update button label
+document.getElementById('targetSelect').addEventListener('change', () => {
   if (state.paused) {
-    // Resume
+    const btn = document.getElementById('startBtn');
+    btn.textContent = getTarget() === activeTarget ? 'Resume' : 'Start Attack';
+  }
+});
+
+// Start attack (or resume if paused)
+function getTarget() { return document.getElementById('targetSelect').value; }
+function getTargetLabel() { return document.getElementById('targetSelect').selectedOptions[0].text; }
+
+async function startAttack() {
+  if (state.paused && getTarget() === activeTarget) {
+    // Resume same target
     try {
-      const res = await fetch('/api/start', { method: 'POST' });
+      const res = await fetch('/api/start?target=' + getTarget(), { method: 'POST' });
       const data = await res.json();
       if (data.error) { addLog('--', 'error', data.error); return; }
     } catch (err) { addLog('--', 'error', 'Resume failed: ' + err.message); return; }
@@ -912,22 +940,27 @@ async function startAttack() {
     setButtons('running');
     addLog('--', 'coeff', 'Attack resumed');
     startElapsedTimer();
-    // Reconnect stream if closed
     if (!eventSource || eventSource.readyState === 2) {
       connectStream('/api/replay');
     }
     return;
   }
+  if (state.paused) {
+    // Target changed while paused — restart with new target
+    return restartAttack();
+  }
 
   // Fresh start
+  if (eventSource) { eventSource.close(); eventSource = null; }
+  if (elapsedTimer) clearInterval(elapsedTimer);
   resetUI();
   setButtons('running');
   state.running = true;
 
-  addLog(0, 'keygen', 'Starting attack...');
+  addLog(0, 'keygen', 'Starting attack on ' + getTargetLabel() + '...');
 
   try {
-    const res = await fetch('/api/start', { method: 'POST' });
+    const res = await fetch('/api/start?target=' + getTarget(), { method: 'POST' });
     const data = await res.json();
     if (data.error) {
       addLog('--', 'error', data.error);
@@ -942,6 +975,7 @@ async function startAttack() {
     return;
   }
 
+  activeTarget = getTarget();
   state.startTime = Date.now();
   startElapsedTimer();
   connectStream('/api/stream');
@@ -969,10 +1003,10 @@ async function restartAttack() {
   resetUI();
   setButtons('running');
   state.running = true;
-  addLog(0, 'keygen', 'Restarting attack...');
+  addLog(0, 'keygen', 'Restarting attack on ' + getTargetLabel() + '...');
 
   try {
-    const res = await fetch('/api/restart', { method: 'POST' });
+    const res = await fetch('/api/restart?target=' + getTarget(), { method: 'POST' });
     const data = await res.json();
     if (data.error) {
       addLog('--', 'error', data.error);
@@ -987,6 +1021,7 @@ async function restartAttack() {
     return;
   }
 
+  activeTarget = getTarget();
   state.startTime = Date.now();
   startElapsedTimer();
   connectStream('/api/stream');
@@ -1018,6 +1053,12 @@ async function init() {
   try {
     const res = await fetch('/api/status');
     const data = await res.json();
+
+    // Restore target selector from server
+    if (data.target) {
+      document.getElementById('targetSelect').value = data.target;
+      activeTarget = data.target;
+    }
 
     if (data.state === 'running') {
       state.running = true;
