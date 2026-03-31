@@ -59,6 +59,8 @@ python3 ui/server.py
 
 Open at `http://localhost:5000`
 
+<img width="1190" height="826" alt="telegram-cloud-document-5-6208256002370838836" src="https://github.com/user-attachments/assets/5dbfa781-8687-467c-a36e-e603177c6df0" />
+
 ## Remarks
 
 If the PoC doesn't produce the correct key guesses on your machine, here is some
